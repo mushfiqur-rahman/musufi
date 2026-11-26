@@ -72,7 +72,7 @@ export default function Home() {
             </Link>
             <div className="hp-body">
               <h2 id="h-pick"><Link href={`/products/${featured.slug}`}>{featured.name}</Link></h2>
-              <p className="meta"><PinIcon width={14} height={14} style={{ verticalAlign: "-2px", color: "var(--green)" }} /> {featured.origin} · {featured.short}</p>
+              <p className="meta"><PinIcon width={14} height={14} style={{ color: "var(--green)", flex: "none" }} /><span>{featured.origin} · {featured.short}</span></p>
               <p className="hp-price num"><b>{taka(fv.price)}</b> <span>{fv.label}</span></p>
               <div className="hp-actions">
                 <Link className="btn btn-primary" href={`/products/${featured.slug}#order`}>অর্ডার করুন</Link>
