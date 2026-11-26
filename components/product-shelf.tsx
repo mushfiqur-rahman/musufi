@@ -1,0 +1,65 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { categories, type CardProduct, type CategoryId } from "@/lib/products";
+import { taka } from "@/lib/site";
+import { ProductPhoto } from "./product-photo";
+
+export function ProductCard({ p, headingLevel = 3 }: { p: CardProduct; headingLevel?: 2 | 3 }) {
+  const [sel, setSel] = useState(p.defaultVariant);
+  const v = p.variants[sel];
+  const href = `/products/${p.slug}`;
+  const H = headingLevel === 2 ? "h2" : "h3";
+  return (
+    <article className="card">
+      <Link className="media" href={href} tabIndex={-1} aria-hidden="true">
+        {p.badge && <span className={`tag${p.badge === "ঘরে তৈরি" ? " green" : ""}`}>{p.badge}</span>}
+        <ProductPhoto label="" art={p.art} />
+      </Link>
+      <div className="body">
+        <H><Link href={href}>{p.name}</Link></H>
+        <p className="meta">{p.short}</p>
+        {p.tasteLine && <p className="taste-line"><span>স্বাদ:</span> {p.tasteLine}</p>}
+        {p.variants.length > 1 ? (
+          <div className="sizes" role="group" aria-label={`${p.name}: পরিমাণ`}>
+            {p.variants.map((x, i) => (
+              <button key={x.label} type="button" aria-pressed={i === sel} onClick={() => setSel(i)}>
+                {x.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="meta">{v.label}</p>
+        )}
+        <p className="price num" aria-live="polite">
+          <b>{taka(v.price)}</b>
+          {v.compareAt && <s aria-label={`আগের দাম ${taka(v.compareAt)}`}>{taka(v.compareAt)}</s>}
+        </p>
+        <Link className="btn btn-primary" href={`${href}#order`}>অর্ডার করুন</Link>
+      </div>
+    </article>
+  );
+}
+
+export function ProductShelf({ items }: { items: CardProduct[] }) {
+  const [cat, setCat] = useState<CategoryId | "all">("all");
+  const shown = cat === "all" ? items : items.filter((p) => p.category === cat);
+  const chips: { id: CategoryId | "all"; label: string }[] = [{ id: "all", label: "সব" }, ...categories.map((c) => ({ id: c.id, label: c.label }))];
+  return (
+    <>
+      <div className="chips" role="group" aria-label="ধরন অনুযায়ী দেখুন">
+        {chips.map((c) => (
+          <button key={c.id} type="button" aria-pressed={cat === c.id} onClick={() => setCat(c.id)}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+      <div className="grid">
+        {shown.map((p) => (
+          <ProductCard key={p.slug} p={p} />
+        ))}
+      </div>
+    </>
+  );
+}
