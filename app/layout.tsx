@@ -9,6 +9,7 @@ import { site } from "@/lib/site";
 import { paymentNames, waLink } from "@/lib/store-config";
 import { getStoreSettings } from "@/lib/store-settings";
 import { getAnnouncement } from "@/lib/content";
+import { toSearchItem } from "@/lib/search";
 import Link from "next/link";
 import "./globals.css";
 
@@ -76,7 +77,7 @@ function storeJsonLd(phone: string, payments: string[]) {
 }
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const [{ categories }, settings, announcement] = await Promise.all([getCatalog(), getStoreSettings(), getAnnouncement()]);
+  const [{ categories, products }, settings, announcement] = await Promise.all([getCatalog(), getStoreSettings(), getAnnouncement()]);
   const orgJsonLd = storeJsonLd(settings.contact.phone, paymentNames(settings.payments));
   return (
     <html lang="bn" data-scroll-behavior="smooth" className={`${poppins.variable} ${bangla.variable}`}>
@@ -87,7 +88,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <div className="wrap">{announcement.link ? <Link href={announcement.link}>{announcement.text} →</Link> : announcement.text}</div>
           </div>
         )}
-        <SiteHeader phone={settings.contact.phone} categories={categories.map((c) => ({ id: c.id, label: c.label }))} />
+        <SiteHeader
+          phone={settings.contact.phone}
+          categories={categories.map((c) => ({ id: c.id, label: c.label }))}
+          searchItems={products.map((p) => toSearchItem(p, categories.find((c) => c.id === p.category)?.label ?? "", false))}
+        />
         <main id="main">{children}</main>
         <SiteFooter />
         <a className="fab" href={waLink(settings.contact.whatsapp, "আসসালামু আলাইকুম, আমি অর্ডার করতে চাই।")} target="_blank" rel="noopener" aria-label="হোয়াটসঅ্যাপে প্রশ্ন করুন">

@@ -5,6 +5,8 @@ import { useState } from "react";
 import { site } from "@/lib/site";
 import { phoneText } from "@/lib/store-config";
 import { CloseIcon, LogoMark, MenuIcon, PhoneIcon, UserIcon } from "./icons";
+import { SearchBox } from "./search-box";
+import type { SearchItem } from "@/lib/search";
 
 export type NavCategory = { id: string; label: string };
 
@@ -14,7 +16,7 @@ const extra = [
   { href: "/#faq", label: "প্রশ্ন ও উত্তর" },
 ];
 
-export function SiteHeader({ categories, phone }: { categories: NavCategory[]; phone: string }) {
+export function SiteHeader({ categories, phone, searchItems }: { categories: NavCategory[]; phone: string; searchItems: SearchItem[] }) {
   const phoneDisplay = phoneText(phone);
   const [open, setOpen] = useState(false);
   const links = categories.map((c) => ({ href: `/category/${c.id}`, label: c.label }));
@@ -55,6 +57,9 @@ export function SiteHeader({ categories, phone }: { categories: NavCategory[]; p
             {open ? <CloseIcon /> : <MenuIcon />}
           </button>
         </div>
+      </div>
+      <div className="wrap search-row">
+        <SearchBox items={searchItems} />
       </div>
       <div className="menu-sheet" id="menu-sheet" hidden={!open}>
         <nav className="wrap" aria-label="মোবাইল মেনু">
