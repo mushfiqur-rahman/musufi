@@ -1,5 +1,8 @@
 import { getCategory, getProduct } from "@/lib/products";
-import { mailConfigured, newOrderNo, sendOrderAlert } from "@/lib/mailer";
+import { clientIp, currentCustomer } from "@/lib/auth";
+import { dbConfigured } from "@/lib/db";
+import { mailConfigured, sendOrderAlert, sendOrderConfirmation, smtpReady } from "@/lib/mailer";
+import { createOrder } from "@/lib/orders";
 import { site, type DeliveryZone } from "@/lib/site";
 
 const BD_MOBILE = /^01[3-9]\d{8}$/;
@@ -62,15 +65,18 @@ export async function POST(request: Request) {
   const result = validate(body);
   if (!result.ok) return Response.json({ message: result.message }, { status: 400 });
 
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
-  if (tooMany(ip)) {
-    return Response.json({ message: `অল্প সময়ে অনেক অর্ডার এসেছে। একটু পরে চেষ্টা করুন, অথবা ${FALLBACK}` }, { status: 429 });
+  if (!dbConfigured()) {
+    return Response.json({ message: `অনলাইন অর্ডার এখনো চালু হয়নি। ${FALLBACK}` }, { status: 503 });
   }
 
-  // Until the database exists, an order is "received" only when the alert email
-  // is accepted by the mail server. Otherwise refuse honestly instead of losing it.
-  if (!mailConfigured()) {
-    return Response.json({ message: `অনলাইন অর্ডার এখনো চালু হয়নি। ${FALLBACK}` }, { status: 503 });
+  // An account is required to order. The form logs the customer in by email code first.
+  const customer = await currentCustomer();
+  if (!customer) {
+    return Response.json({ needLogin: true, message: "অর্ডার করতে ইমেইল দিয়ে লগইন করুন।" }, { status: 401 });
+  }
+
+  if (tooMany(clientIp(request))) {
+    return Response.json({ message: `অল্প সময়ে অনেক অর্ডার এসেছে। একটু পরে চেষ্টা করুন, অথবা ${FALLBACK}` }, { status: 429 });
   }
 
   // Prices are always recalculated on the server, never trusted from the browser.
@@ -78,32 +84,50 @@ export async function POST(request: Request) {
   const product = getProduct(o.slug)!;
   const v = product.variants[o.variant];
   const zone = site.delivery[o.zone];
-  const orderNo = newOrderNo();
 
+  let saved: { orderNo: string; total: number };
   try {
-    await sendOrderAlert({
-      orderNo,
-      productName: product.name,
-      variantLabel: v.label,
-      unitPrice: v.price,
+    saved = await createOrder({
+      customerId: customer.id,
+      product,
+      variantIndex: o.variant,
       qty: o.qty,
-      zoneLabel: zone.label,
+      zone: o.zone,
       deliveryFee: zone.fee,
-      total: v.price * o.qty + zone.fee,
       name: o.name,
       phone: o.phone,
       address: o.address,
-      placedAt: new Date(),
     });
   } catch (err) {
-    console.error(`[order] alert email failed for ${orderNo}:`, err instanceof Error ? err.message : err);
-    return Response.json({ message: `অর্ডার পাঠানো যায়নি। ${FALLBACK}` }, { status: 502 });
+    console.error("[order] could not save order:", err instanceof Error ? err.message : err);
+    return Response.json({ message: `অর্ডার সংরক্ষণ করা যায়নি। ${FALLBACK}` }, { status: 500 });
   }
 
-  // TODO (backend): require a signed-in customer, save the order in MySQL,
-  // and run the courier history check.
+  // The order is saved, so email problems are logged but do not fail the order.
+  const alert = {
+    orderNo: saved.orderNo,
+    productName: product.name,
+    variantLabel: v.label,
+    unitPrice: v.price,
+    qty: o.qty,
+    zoneLabel: zone.label,
+    deliveryFee: zone.fee,
+    total: saved.total,
+    name: o.name,
+    phone: o.phone,
+    address: o.address,
+    placedAt: new Date(),
+  };
+  const mails: Promise<void>[] = [];
+  if (mailConfigured()) mails.push(sendOrderAlert(alert));
+  if (smtpReady()) mails.push(sendOrderConfirmation(customer.email, alert));
+  const results = await Promise.allSettled(mails);
+  for (const r of results) {
+    if (r.status === "rejected") console.error(`[order] email failed for ${saved.orderNo}:`, r.reason instanceof Error ? r.reason.message : r.reason);
+  }
+
   return Response.json({
-    orderNo,
-    message: `অর্ডার পাওয়া গেছে। অর্ডার নম্বর ${orderNo}। আমরা শিগগিরই ${o.phone} নম্বরে ফোন করে নিশ্চিত করব।`,
+    orderNo: saved.orderNo,
+    message: `অর্ডার পাওয়া গেছে। অর্ডার নম্বর ${saved.orderNo}। আমরা শিগগিরই ${o.phone} নম্বরে ফোন করে নিশ্চিত করব।`,
   });
 }

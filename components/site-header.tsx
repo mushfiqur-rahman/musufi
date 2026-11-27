@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 import { categories } from "@/lib/products";
 import { phoneDisplay, site } from "@/lib/site";
-import { CloseIcon, LogoMark, MenuIcon, PhoneIcon } from "./icons";
+import { CloseIcon, LogoMark, MenuIcon, PhoneIcon, UserIcon } from "./icons";
 
 const links = categories.map((c) => ({ href: `/category/${c.id}`, label: c.label }));
 const extra = [
+  { href: "/account", label: "আমার অর্ডার" },
   { href: "/#delivery", label: "ডেলিভারি ও পেমেন্ট" },
   { href: "/#faq", label: "প্রশ্ন ও উত্তর" },
 ];
@@ -37,6 +38,9 @@ export function SiteHeader() {
           <a className="icon-btn menu-btn" href={`tel:${site.phone}`} aria-label={`কল করুন ${phoneDisplay}`}>
             <PhoneIcon />
           </a>
+          <Link className="icon-btn" href="/account" aria-label="আমার অ্যাকাউন্ট ও অর্ডার">
+            <UserIcon />
+          </Link>
           <button
             type="button"
             className="icon-btn menu-btn"
