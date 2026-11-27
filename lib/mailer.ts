@@ -119,18 +119,29 @@ function shell(title: string, body: string): string {
 </div></body></html>`;
 }
 
-/** Emails a 6-digit login code. */
+/**
+ * Emails a 6-digit login code.
+ * Subject and first line are in plain English ("Use code 123456 to log in to
+ * Musufi", "Your Musufi login code is 123456") because Gmail recognises codes
+ * written that way and then shows its own "Copy code" button above the email.
+ * (An email itself can't run a copy button; that card is Gmail's feature.)
+ */
 export async function sendLoginCode(to: string, code: string): Promise<void> {
-  const spaced = code.split("").join(" ");
+  const digits = code
+    .split("")
+    .map((d) => `<td style="width:44px;height:52px;background:#fff;border:1px solid #dce5dd;border-radius:8px;text-align:center;font:700 28px/52px 'Courier New',monospace;color:#1a2820">${esc(d)}</td>`)
+    .join('<td style="width:8px"></td>');
   await getTransport().sendMail({
-    from: { name: site.name, address: env("SMTP_USER") },
+    from: { name: "Musufi", address: env("SMTP_USER") },
     to,
-    subject: `${site.name} লগইন কোড: ${code}`,
-    text: `আপনার ${site.name} লগইন কোড: ${code}\n\nকোডটি ১০ মিনিট পর্যন্ত কাজ করবে। আপনি না চাইলে এই ইমেইল উপেক্ষা করুন।`,
+    subject: `Use code ${code} to log in to Musufi`,
+    text:
+      `Your Musufi login code is ${code}\n\n` +
+      `আপনার মুসুফি লগইন কোড: ${code}\nকোডটি ১০ মিনিট পর্যন্ত কাজ করবে। আপনি কোড না চাইলে এই ইমেইল উপেক্ষা করুন। কাউকে এই কোড বলবেন না।`,
     html: shell(
-      "আপনার লগইন কোড",
-      `<p style="margin:0 0 12px;color:#55665b">ওয়েবসাইটে এই কোডটি লিখুন। কোডটি ১০ মিনিট পর্যন্ত কাজ করবে।</p>
-       <p style="margin:0 0 16px;font-size:32px;font-weight:700;letter-spacing:6px;background:#fff;border:1px solid #dce5dd;border-radius:10px;padding:14px 18px;text-align:center">${esc(spaced)}</p>
+      `Your Musufi login code is ${code}`,
+      `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border-collapse:separate"><tr>${digits}</tr></table>
+       <p style="margin:0 0 12px;color:#55665b">ওয়েবসাইটে এই কোডটি লিখুন। কোডটি ১০ মিনিট পর্যন্ত কাজ করবে।</p>
        <p style="margin:0;color:#55665b;font-size:13px">আপনি কোড না চাইলে এই ইমেইল উপেক্ষা করুন। কাউকে এই কোড বলবেন না।</p>`,
     ),
   });
