@@ -55,6 +55,7 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
           name: String(data.get("name") ?? "").trim(),
           phone,
           address: String(data.get("address") ?? "").trim(),
+          website: String(data.get("website") ?? ""),
         }),
       });
       const body = (await res.json().catch(() => ({}))) as { message?: string };
@@ -110,6 +111,11 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
       </div>
 
       <form className="order" id="order" onSubmit={onSubmit} noValidate aria-labelledby={`${id}-oh`}>
+        {/* Spam trap: hidden from people and screen readers; bots tend to fill it. */}
+        <div className="sr-only-x" aria-hidden="true">
+          <label htmlFor={`${id}-web`}>Website</label>
+          <input id={`${id}-web`} name="website" tabIndex={-1} autoComplete="off" defaultValue="" />
+        </div>
         <h2 id={`${id}-oh`}>অর্ডারের তথ্য দিন</h2>
         <div className="field">
           <label htmlFor={`${id}-name`}>আপনার নাম</label>
@@ -153,7 +159,7 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
           <div><span>ডেলিভারি</span><span>{taka(fee)}</span></div>
           <div className="grand"><span>মোট, হাতে পেয়ে দিবেন</span><span>{taka(total)}</span></div>
         </div>
-        <button className="btn btn-primary btn-lg" type="submit" disabled={status.kind === "sending"}>
+        <button className="btn btn-primary btn-lg" type="submit" disabled={status.kind === "sending" || status.kind === "ok"}>
           {status.kind === "sending" ? "পাঠানো হচ্ছে..." : "অর্ডার নিশ্চিত করুন"}
         </button>
         {(status.kind === "ok" || status.kind === "bad") && (

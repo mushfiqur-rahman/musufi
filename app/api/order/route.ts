@@ -1,4 +1,5 @@
 import { getCategory, getProduct } from "@/lib/products";
+import { mailConfigured, newOrderNo, sendOrderAlert } from "@/lib/mailer";
 import { site, type DeliveryZone } from "@/lib/site";
 
 const BD_MOBILE = /^01[3-9]\d{8}$/;
@@ -33,22 +34,76 @@ function validate(body: unknown): { ok: true; order: OrderInput } | { ok: false;
   return { ok: true, order: { slug: product.slug, variant, qty, zone: b.zone, name, phone, address } };
 }
 
+// Simple spam guard: at most 5 orders per 10 minutes from one IP address.
+// In-memory, so it resets when the server restarts; enough for a small shop.
+const WINDOW_MS = 10 * 60 * 1000;
+const MAX_PER_WINDOW = 5;
+const recent = new Map<string, number[]>();
+
+function tooMany(ip: string): boolean {
+  const now = Date.now();
+  const hits = (recent.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
+  hits.push(now);
+  recent.set(ip, hits);
+  if (recent.size > 5000) recent.clear();
+  return hits.length > MAX_PER_WINDOW;
+}
+
+const FALLBACK = "দয়া করে হোয়াটসঅ্যাপে বা ফোনে অর্ডার করুন।";
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
+
+  // Honeypot: a hidden field real customers never fill. Bots get a fake success.
+  if (body && typeof body === "object" && (body as Record<string, unknown>).website) {
+    return Response.json({ message: "অর্ডার পাওয়া গেছে।" });
+  }
+
   const result = validate(body);
   if (!result.ok) return Response.json({ message: result.message }, { status: 400 });
 
-  // Prices are always recalculated on the server, never trusted from the browser.
-  const product = getProduct(result.order.slug)!;
-  const v = product.variants[result.order.variant];
-  const total = v.price * result.order.qty + site.delivery[result.order.zone].fee;
-  void total;
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+  if (tooMany(ip)) {
+    return Response.json({ message: `অল্প সময়ে অনেক অর্ডার এসেছে। একটু পরে চেষ্টা করুন, অথবা ${FALLBACK}` }, { status: 429 });
+  }
 
-  // TODO (phase 2): require a signed-in customer, save the order in MySQL,
-  // run the courier history check, and notify the owner.
-  // Until storage exists, refuse honestly instead of losing the order.
-  return Response.json(
-    { message: "অনলাইন অর্ডার এখনো চালু হয়নি। দয়া করে হোয়াটসঅ্যাপে বা ফোনে অর্ডার করুন।" },
-    { status: 503 },
-  );
+  // Until the database exists, an order is "received" only when the alert email
+  // is accepted by the mail server. Otherwise refuse honestly instead of losing it.
+  if (!mailConfigured()) {
+    return Response.json({ message: `অনলাইন অর্ডার এখনো চালু হয়নি। ${FALLBACK}` }, { status: 503 });
+  }
+
+  // Prices are always recalculated on the server, never trusted from the browser.
+  const o = result.order;
+  const product = getProduct(o.slug)!;
+  const v = product.variants[o.variant];
+  const zone = site.delivery[o.zone];
+  const orderNo = newOrderNo();
+
+  try {
+    await sendOrderAlert({
+      orderNo,
+      productName: product.name,
+      variantLabel: v.label,
+      unitPrice: v.price,
+      qty: o.qty,
+      zoneLabel: zone.label,
+      deliveryFee: zone.fee,
+      total: v.price * o.qty + zone.fee,
+      name: o.name,
+      phone: o.phone,
+      address: o.address,
+      placedAt: new Date(),
+    });
+  } catch (err) {
+    console.error(`[order] alert email failed for ${orderNo}:`, err instanceof Error ? err.message : err);
+    return Response.json({ message: `অর্ডার পাঠানো যায়নি। ${FALLBACK}` }, { status: 502 });
+  }
+
+  // TODO (backend): require a signed-in customer, save the order in MySQL,
+  // and run the courier history check.
+  return Response.json({
+    orderNo,
+    message: `অর্ডার পাওয়া গেছে। অর্ডার নম্বর ${orderNo}। আমরা শিগগিরই ${o.phone} নম্বরে ফোন করে নিশ্চিত করব।`,
+  });
 }
