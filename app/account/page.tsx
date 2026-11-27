@@ -8,6 +8,10 @@ import { currentCustomer } from "@/lib/auth";
 import { customerOrders, statusLabel } from "@/lib/orders";
 import { reviewableItems } from "@/lib/reviews";
 import { ReviewForm } from "@/components/review-form";
+import { ProfileForm } from "@/components/profile-form";
+import type { AddressValue } from "@/components/address-picker";
+import { publicConfig } from "@/lib/store-config";
+import { getStoreSettings } from "@/lib/store-settings";
 import { bn, taka } from "@/lib/site";
 import { dhakaDateTime } from "@/lib/time";
 
@@ -27,7 +31,8 @@ async function Account() {
   await connection(); // database work happens only for a real request, never while prerendering
   const me = await currentCustomer();
   if (!me) redirect("/login");
-  const [orders, toReview] = await Promise.all([customerOrders(me.id), reviewableItems(me.id)]);
+  const [orders, toReview, settings] = await Promise.all([customerOrders(me.id), reviewableItems(me.id), getStoreSettings()]);
+  const profileIncomplete = !me.name || !me.phone || !me.addressParts;
 
   return (
     <>
@@ -41,6 +46,18 @@ async function Account() {
           <LogoutButton />
         </div>
       </div>
+
+      <details className="panel pw-panel" open={profileIncomplete}>
+        <summary><h2>আমার তথ্য ও ঠিকানা</h2></summary>
+        <p className="hint">এখানে রাখা নাম, মোবাইল আর ঠিকানা অর্ডার করার সময় নিজে থেকেই বসে যাবে।</p>
+        <ProfileForm
+          email={me.email}
+          name={me.name ?? ""}
+          phone={me.phone ?? ""}
+          address={(me.addressParts as Partial<AddressValue> | null) ?? null}
+          config={publicConfig(settings)}
+        />
+      </details>
 
       {toReview.length > 0 && (
         <section className="panel" aria-labelledby="h-toreview">
