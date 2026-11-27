@@ -65,7 +65,7 @@ const orgJsonLd = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="bn" className={`${poppins.variable} ${hind.variable}`}>
+    <html lang="bn" data-scroll-behavior="smooth" className={`${poppins.variable} ${hind.variable}`}>
       <body>
         <a className="skip" href="#main">মূল অংশে যান</a>
         <SiteHeader />
