@@ -126,5 +126,6 @@ migration that has already been applied; add a new one.
 - Done: phase 1 (roles, activity log, dashboard, products in DB), phase 2
   (orders, customers, settings), phase 3 (coupons, reviews, pages and
   announcement, staff 2FA).
-- **Next**: courier integration and fraud check (needs the courier's API
-  account: Steadfast, Pathao or RedX), automatic database backups.
+- **Later (deferred by the owner)**: courier integration and fraud check
+  (Steadfast planned; needs its API keys), automatic database backups.
+  Until then, enter the courier name and tracking number by hand on the order page.
