@@ -2,7 +2,8 @@ import { loadOrderable, type Orderable } from "@/lib/catalog";
 import { clientIp, currentCustomer } from "@/lib/auth";
 import { dbConfigured } from "@/lib/db";
 import { mailConfigured, sendOrderAlert, sendOrderConfirmation, smtpReady } from "@/lib/mailer";
-import { createOrder, OutOfStockError } from "@/lib/orders";
+import { evaluateCoupon } from "@/lib/coupons";
+import { CouponUsedUpError, createOrder, OutOfStockError } from "@/lib/orders";
 import { serverTrouble } from "@/lib/api";
 import { findDistrict, findDivision, findUpazila, formatAddress, localLabel, zoneForDistrict, type AddressParts } from "@/lib/geo";
 import { findUnion } from "@/lib/geo-unions";
@@ -151,6 +152,16 @@ export async function POST(request: Request) {
   const v = product.variants[o.variant];
   const zone = { label: settings.delivery[o.zone].label, fee: deliveryFee(settings, o.zone, v.price * o.qty) };
 
+  // Coupon: checked again here (never trust the preview). A bad code stops the order
+  // with a clear message instead of silently charging the full price.
+  let coupon: { id: number; code: string; discount: number } | undefined;
+  const rawCoupon = (body as Record<string, unknown>).coupon;
+  if (typeof rawCoupon === "string" && rawCoupon.trim()) {
+    const c = await evaluateCoupon(rawCoupon, { subtotal: v.price * o.qty, deliveryFee: zone.fee, customerId: customer.id });
+    if (!c.ok) return Response.json({ message: c.message, field: "coupon" }, { status: 409 });
+    coupon = { id: c.coupon.id, code: c.coupon.code, discount: c.discount };
+  }
+
   let saved: { orderNo: string; total: number };
   try {
     saved = await createOrder({
@@ -164,8 +175,12 @@ export async function POST(request: Request) {
       phone: o.phone,
       address: o.address,
       parts: o.parts,
+      coupon,
     });
   } catch (err) {
+    if (err instanceof CouponUsedUpError) {
+      return Response.json({ message: "দুঃখিত, এই কুপনের সব ব্যবহার শেষ হয়ে গেছে। কুপন ছাড়া আবার চেষ্টা করুন।", field: "coupon" }, { status: 409 });
+    }
     if (err instanceof OutOfStockError) {
       return Response.json({ message: "দুঃখিত, এইমাত্র এই সাইজের স্টক শেষ হয়ে গেছে।" }, { status: 409 });
     }

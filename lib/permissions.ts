@@ -15,7 +15,8 @@ export const PERMISSIONS = [
   "products.manage", // create, edit, publish, images, stock
   "reports.view", // profit, expenses
   "finance.manage", // expenses, cost prices, courier costs
-  "content.manage", // pages, banners (phase 3)
+  "content.manage", // pages, announcement bar
+  "marketing.manage", // coupons, review moderation
   "settings.manage",
   "staff.manage", // add/remove staff, change roles
   "audit.view",
@@ -36,6 +37,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "reports.view",
     "finance.manage",
     "content.manage",
+    "marketing.manage",
     "audit.view",
   ],
   order_staff: ["dashboard.view", "orders.view", "orders.manage", "customers.view", "products.view"],
@@ -53,7 +55,7 @@ export const roleDescription: Record<Role, string> = {
   owner: "সব কিছু, স্টাফ ও সেটিংসসহ",
   manager: "স্টাফ আর সেটিংস ছাড়া সব",
   order_staff: "অর্ডার দেখা ও অবস্থা বদলানো, ক্রেতার তথ্য দেখা",
-  content_editor: "পণ্য যোগ, সম্পাদনা ও প্রকাশ",
+  content_editor: "পণ্য, ক্যাটাগরি, পেজ ও ঘোষণা",
 };
 
 export function can(role: Role | null | undefined, permission: Permission): boolean {

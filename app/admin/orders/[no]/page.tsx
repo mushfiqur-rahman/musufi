@@ -79,6 +79,7 @@ async function OrderDetail({ params }: { params: PageProps<"/admin/orders/[no]">
           <dl className="kv num">
             <dt>পণ্যের দাম</dt><dd>{taka(o.subtotal)}</dd>
             <dt>ডেলিভারি চার্জ</dt><dd>{taka(o.delivery_fee)}</dd>
+            {o.discount > 0 && <><dt>কুপন {o.coupon_code}</dt><dd>−{taka(o.discount)}</dd></>}
             <dt>ক্রেতা দেবেন</dt><dd><b>{taka(o.total)}</b></dd>
             <dt>কেনা দাম</dt><dd>{o.cost_total === null ? <Link href="/admin/costs">সেট করা নেই</Link> : taka(o.cost_total)}</dd>
             <dt>পণ্যে লাভ</dt><dd>{profit === null ? "–" : taka(profit)}</dd>

@@ -80,4 +80,11 @@ export const actionLabel: Record<string, string> = {
   "expense.delete": "খরচ মুছে ফেলা",
   "settings.update": "সেটিংস",
   "stock.adjust": "স্টক বদল",
+  "coupon.save": "কুপন",
+  "review.moderate": "রিভিউ যাচাই",
+  "page.save": "পেজ সম্পাদনা",
+  "announcement.save": "ঘোষণা",
+  "2fa.enable": "২-ধাপ লগইন চালু",
+  "2fa.disable": "২-ধাপ লগইন বন্ধ",
+  "2fa.reset": "২-ধাপ লগইন রিসেট (মালিক)",
 };

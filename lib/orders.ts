@@ -31,7 +31,14 @@ export type NewOrder = {
   /** Full address line (see lib/geo.ts formatAddress). */
   address: string;
   parts: AddressParts;
+  /** Validated coupon (lib/coupons.ts evaluateCoupon), if any. */
+  coupon?: { id: number; code: string; discount: number };
 };
+
+/** Thrown when a coupon reached its total usage limit while the order was being placed. */
+export class CouponUsedUpError extends Error {
+  readonly code = "COUPON_USED_UP";
+}
 
 /** Thrown when a tracked variant doesn't have enough stock left. */
 export class OutOfStockError extends Error {
@@ -47,7 +54,8 @@ export class OutOfStockError extends Error {
 export async function createOrder(o: NewOrder): Promise<{ orderNo: string; subtotal: number; total: number }> {
   const v = o.product.variants[o.variantIndex];
   const subtotal = v.price * o.qty;
-  const total = subtotal + o.deliveryFee;
+  const discount = o.coupon?.discount ?? 0;
+  const total = Math.max(0, subtotal + o.deliveryFee - discount);
   const cost = v.cost;
 
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -59,13 +67,21 @@ export async function createOrder(o: NewOrder): Promise<{ orderNo: string; subto
           [o.qty, v.id, o.qty],
         );
         if (v.stock !== null && stock.affectedRows !== 1) throw new OutOfStockError(`Not enough stock for variant ${v.id}`);
+        if (o.coupon) {
+          // Guarded increment: a coupon limited to N uses can never be used N+1 times.
+          const [used] = await conn.query<import("mysql2").ResultSetHeader>(
+            "UPDATE coupons SET used_count = used_count + 1 WHERE id = ? AND active = 1 AND (usage_limit IS NULL OR used_count < usage_limit)",
+            [o.coupon.id],
+          );
+          if (used.affectedRows !== 1) throw new CouponUsedUpError("Coupon used up");
+        }
 
         const [res] = await conn.query<import("mysql2").ResultSetHeader>(
           `INSERT INTO orders (order_no, customer_id, name, phone, address, division_id, district_id, upazila_id, local_id, address_line,
-                               zone, subtotal, delivery_fee, total, cost_total)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                               zone, subtotal, delivery_fee, coupon_code, discount, total, cost_total)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [orderNo, o.customerId, o.name, o.phone, o.address, o.parts.divisionId, o.parts.districtId, o.parts.upazilaId, o.parts.localId,
-           o.parts.line, o.zone, subtotal, o.deliveryFee, total, cost === null ? null : cost * o.qty],
+           o.parts.line, o.zone, subtotal, o.deliveryFee, o.coupon?.code ?? null, discount, total, cost === null ? null : cost * o.qty],
         );
         await conn.query(
           `INSERT INTO order_items (order_id, product_slug, product_name, variant_index, variant_id, variant_label, unit_price, unit_cost, qty)
@@ -142,6 +158,8 @@ export type OrderRow = {
   zone: DeliveryZone;
   subtotal: number;
   delivery_fee: number;
+  coupon_code: string | null;
+  discount: number;
   total: number;
   cost_total: number | null;
   note: string | null;
@@ -161,7 +179,7 @@ export type OrderRow = {
 
 const ORDER_SELECT = `
   SELECT o.id, o.order_no, o.customer_id, o.status, o.name, o.phone, o.address, o.district_id, o.zone, o.subtotal, o.delivery_fee,
-         o.total, o.cost_total, o.note, o.payment_method, o.payment_status, o.paid_amount, o.refund_amount, o.payment_ref,
+         o.coupon_code, o.discount, o.total, o.cost_total, o.note, o.payment_method, o.payment_status, o.paid_amount, o.refund_amount, o.payment_ref,
          o.courier, o.tracking_no, o.created_at, o.shipped_at, o.delivered_at, c.email,
          (SELECT GROUP_CONCAT(CONCAT(i.product_name, ' · ', i.variant_label, ' × ', i.qty) SEPARATOR '\\n')
             FROM order_items i WHERE i.order_id = o.id) AS items
@@ -280,6 +298,11 @@ export async function setStatus(orderNo: string, status: OrderStatus, note: stri
   const restock = status === "cancelled" && (order.status === "new" || order.status === "confirmed");
   await transaction(async (conn) => {
     if (restock) {
+      // Give the coupon use back too.
+      await conn.query(
+        "UPDATE coupons c JOIN orders o ON o.coupon_code = c.code SET c.used_count = GREATEST(c.used_count - 1, 0) WHERE o.id = ?",
+        [order.id],
+      );
       await conn.query(
         `UPDATE product_variants v JOIN order_items i ON i.variant_id = v.id
          SET v.stock = v.stock + i.qty WHERE i.order_id = ? AND v.stock IS NOT NULL`,

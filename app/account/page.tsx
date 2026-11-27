@@ -6,6 +6,8 @@ import { Suspense } from "react";
 import { LogoutButton } from "@/components/login-form";
 import { currentCustomer } from "@/lib/auth";
 import { customerOrders, statusLabel } from "@/lib/orders";
+import { reviewableItems } from "@/lib/reviews";
+import { ReviewForm } from "@/components/review-form";
 import { bn, taka } from "@/lib/site";
 import { dhakaDateTime } from "@/lib/time";
 
@@ -25,7 +27,7 @@ async function Account() {
   await connection(); // database work happens only for a real request, never while prerendering
   const me = await currentCustomer();
   if (!me) redirect("/login");
-  const orders = await customerOrders(me.id);
+  const [orders, toReview] = await Promise.all([customerOrders(me.id), reviewableItems(me.id)]);
 
   return (
     <>
@@ -39,6 +41,14 @@ async function Account() {
           <LogoutButton />
         </div>
       </div>
+
+      {toReview.length > 0 && (
+        <section className="panel" aria-labelledby="h-toreview">
+          <h2 id="h-toreview">রিভিউ দিন</h2>
+          <p className="hint">আপনার মতামত অন্য ক্রেতাদের সাহায্য করে।</p>
+          {toReview.map((t) => <ReviewForm key={`${t.order_id}-${t.product_id}`} orderId={t.order_id} productId={t.product_id} productName={t.product_name} defaultName={me.name ?? ""} />)}
+        </section>
+      )}
 
       {orders.length === 0 ? (
         <div className="reviews-empty">

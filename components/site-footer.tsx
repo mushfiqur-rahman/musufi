@@ -3,10 +3,11 @@ import { getCatalog } from "@/lib/catalog";
 import { bn, site } from "@/lib/site";
 import { phoneText, waLink } from "@/lib/store-config";
 import { getStoreSettings } from "@/lib/store-settings";
+import { publishedPages } from "@/lib/content";
 import { LogoMark, WhatsAppIcon } from "./icons";
 
 export async function SiteFooter() {
-  const [{ categories }, settings] = await Promise.all([getCatalog(), getStoreSettings()]);
+  const [{ categories }, settings, pages] = await Promise.all([getCatalog(), getStoreSettings(), publishedPages()]);
   const c = settings.contact;
   return (
     <footer className="site-footer">
@@ -35,6 +36,7 @@ export async function SiteFooter() {
             <li><Link href="/#delivery">ডেলিভারি ও পেমেন্ট</Link></li>
             <li><Link href="/#faq">প্রশ্ন ও উত্তর</Link></li>
             <li><Link href="/#story">আমাদের গল্প</Link></li>
+            {pages.filter((p) => p.in_footer).map((p) => <li key={p.slug}><Link href={`/p/${p.slug}`}>{p.title}</Link></li>)}
           </ul>
         </div>
         <div>

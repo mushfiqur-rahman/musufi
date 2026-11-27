@@ -50,6 +50,10 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones, config }: 
   const [addrErrors, setAddrErrors] = useState<AddressErrors>({});
   const [step, setStep] = useState<"form" | "code">("form");
   const [code, setCode] = useState("");
+  // Coupon: what the customer typed, and the server's preview of it.
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<{ code: string; discount: number; message: string } | null>(null);
+  const [couponMsg, setCouponMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -84,7 +88,26 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones, config }: 
   const zoneAllowed = zone === null || zones.includes(zone);
   const subtotal = v.price * qty;
   const fee = zone ? deliveryFee(config, zone, subtotal) : 0;
-  const total = subtotal + fee;
+  const discount = coupon ? Math.min(coupon.discount, subtotal + fee) : 0;
+  const total = subtotal + fee - discount;
+
+  async function applyCoupon() {
+    const c = couponInput.trim();
+    if (!c) return;
+    setCouponMsg(null);
+    try {
+      const r = await postJson("/api/coupon", { code: c, slug, variant: sel, qty, districtId: addr.districtId || null });
+      if (r.ok && r.body.ok) {
+        setCoupon({ code: c.toUpperCase(), discount: Number(r.body.discount), message: String(r.body.message) });
+        setCouponMsg({ ok: true, text: String(r.body.message) });
+      } else {
+        setCoupon(null);
+        setCouponMsg({ ok: false, text: String(r.body.message ?? "কুপন কাজ করেনি।") });
+      }
+    } catch {
+      setCouponMsg({ ok: false, text: "ইন্টারনেট সংযোগ পাওয়া যায়নি।" });
+    }
+  }
   const busy = status.kind === "sending";
   const set = (k: keyof typeof fields) => (e: React.ChangeEvent<HTMLInputElement>) => setFields((f) => ({ ...f, [k]: e.target.value }));
 
@@ -119,7 +142,9 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones, config }: 
           localId: addr.localId === "" ? null : addr.localId, line: addr.line.trim(),
         },
         website: (document.getElementById(`${id}-web`) as HTMLInputElement | null)?.value ?? "",
+        coupon: coupon?.code ?? "",
       });
+      if (r.body.field === "coupon") { setCoupon(null); setCouponMsg({ ok: false, text: String(r.body.message) }); }
       if (r.status === 401) { setMe(null); setStep("form"); setStatus({ kind: "bad", text: String(r.body.message ?? "আবার লগইন করুন।") }); return; }
       setStatus(r.ok ? { kind: "ok", text: String(r.body.message) } : { kind: "bad", text: String(r.body.message ?? "অর্ডার পাঠানো যায়নি। হোয়াটসঅ্যাপে বা ফোনে অর্ডার করুন।") });
     } catch {
@@ -255,9 +280,20 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones, config }: 
           {!zoneAllowed && <p className="notice bad" role="alert">এই ঠিকানায় এই পণ্য পাঠানো যায় না। ঢাকা জেলার ঠিকানা দিন।</p>}
         </fieldset>
 
+        <details className="coupon-box" open={Boolean(coupon)}>
+          <summary>কুপন কোড আছে?</summary>
+          <div className="coupon-row">
+            <label className="sr-only-x" htmlFor={`${id}-coupon`}>কুপন কোড</label>
+            <input id={`${id}-coupon`} value={couponInput} onChange={(e) => { setCouponInput(e.target.value); if (coupon) setCoupon(null); }} placeholder="যেমন: EID10" autoCapitalize="characters" maxLength={30} />
+            <button type="button" className="btn btn-ghost" onClick={applyCoupon} disabled={!couponInput.trim()}>প্রয়োগ করুন</button>
+          </div>
+          {couponMsg && <p className={`notice ${couponMsg.ok ? "ok" : "bad"}`} role="status">{couponMsg.text}</p>}
+        </details>
+
         <div className="total num" aria-live="polite">
           <div><span>{name} {v.label} × {bn(qty)}</span><span>{taka(subtotal)}</span></div>
           <div><span>ডেলিভারি</span><span>{zone ? taka(fee) : "জেলা বেছে নিলে দেখাবে"}</span></div>
+          {discount > 0 && <div className="discount"><span>কুপন {coupon?.code}</span><span>−{taka(discount)}</span></div>}
           <div className="grand"><span>মোট, হাতে পেয়ে দিবেন</span><span>{taka(total)}</span></div>
         </div>
 

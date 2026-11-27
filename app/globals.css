@@ -686,3 +686,44 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .pill.seg-inactive { background: var(--honey-soft); color: var(--honey-ink); }
 .pill.seg-blocked { background: #f8e3e1; color: #9b2a20; }
 .district-picker details { border-top: 1px solid var(--line); padding: 6px 0; } .district-picker summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+
+/* Coupon box in the order form */
+.coupon-box summary { cursor: pointer; color: var(--green); font-weight: 600; }
+.coupon-row { display: flex; gap: 8px; margin-top: 8px; }
+.coupon-row input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--muted); background: var(--surface); text-transform: uppercase; }
+.total .discount { color: var(--green); font-weight: 600; }
+
+/* Announcement bar */
+.announce { background: var(--green-deep); color: #fff; font-size: var(--step--1); text-align: center; }
+.announce .wrap { padding-block: 6px; }
+.announce a { color: #fff; font-weight: 600; }
+
+/* Reviews */
+.review-list { display: grid; gap: 14px; }
+.review-avg { font-size: 1.05rem; }
+.review-avg b { font-size: 1.6rem; }
+.review-avg span[aria-hidden] { color: var(--honey); letter-spacing: 2px; }
+.review-item { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 4px; }
+.review-item b { color: var(--honey); }
+.review-reply { background: var(--leaf-50); padding: 8px 12px; border-radius: var(--r-sm); }
+.review-body { margin: 0; padding: 10px 14px; border-left: 3px solid var(--leaf-100); background: var(--bg); }
+.review-form { border-top: 1px solid var(--line); padding-top: 12px; }
+.stars { border: 0; padding: 0; margin: 0; display: flex; gap: 2px; align-items: center; flex-wrap: wrap; }
+.stars legend { font-weight: 600; margin-bottom: 4px; width: 100%; }
+.stars button { font-size: 1.8rem; line-height: 1; color: var(--honey); padding: 4px; min-width: 44px; min-height: 44px; }
+
+/* Content pages */
+.prose-page h1 { font-size: var(--step-3); }
+.prose-body { display: grid; gap: 12px; max-width: 70ch; }
+.prose-body h2 { font-size: var(--step-2); margin-top: 12px; }
+.prose-body ul, .prose-body ol { padding-left: 1.4em; display: grid; gap: 4px; }
+.prose-body ul { list-style: disc; }
+.prose-body ol { list-style: decimal; }
+.prose-body a { color: var(--green); text-decoration: underline; }
+
+/* ---------- Staff 2FA ---------- */
+.stack { display: grid; gap: 12px; align-content: start; }
+.panel.narrow { max-width: 520px; margin: 24px auto; }
+.steps-list { display: grid; gap: 10px; padding-left: 1.3em; margin: 0; }
+.totp-secret { display: block; margin-top: 6px; padding: 10px 12px; background: var(--leaf-50); border-radius: var(--r-sm); font-size: 1.05rem; letter-spacing: 0.08em; user-select: all; }
+.totp-field input { max-width: 220px; font-size: 1.25rem; letter-spacing: 0.2em; }

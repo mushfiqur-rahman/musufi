@@ -17,6 +17,9 @@ const NAV: { href: string; label: string; perm: Permission }[] = [
   { href: "/admin/customers", label: "ক্রেতা", perm: "customers.view" },
   { href: "/admin/products", label: "পণ্য", perm: "products.view" },
   { href: "/admin/categories", label: "ক্যাটাগরি", perm: "products.manage" },
+  { href: "/admin/coupons", label: "কুপন", perm: "marketing.manage" },
+  { href: "/admin/reviews", label: "রিভিউ", perm: "marketing.manage" },
+  { href: "/admin/pages", label: "পেজ ও ঘোষণা", perm: "content.manage" },
   { href: "/admin/reports", label: "লাভ-ক্ষতি", perm: "reports.view" },
   { href: "/admin/expenses", label: "খরচ", perm: "finance.manage" },
   { href: "/admin/costs", label: "পার্সেল খরচ", perm: "finance.manage" },
@@ -51,6 +54,7 @@ async function AdminNav() {
       {NAV.filter((n) => can(role, n.perm)).map((n) => (
         <Link key={n.href} href={n.href}>{n.label}</Link>
       ))}
+      <Link href="/admin/security">নিরাপত্তা (২-ধাপ লগইন)</Link>
       <Link href="/" className="admin-back">← দোকানে ফিরুন</Link>
     </nav>
   );

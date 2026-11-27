@@ -78,6 +78,7 @@ async function Invoice({ params }: { params: PageProps<"/admin/orders/[no]/invoi
           <tfoot>
             <tr><td colSpan={4}>পণ্যের দাম</td><td className="r num">{taka(o.subtotal)}</td></tr>
             <tr><td colSpan={4}>ডেলিভারি চার্জ</td><td className="r num">{taka(o.delivery_fee)}</td></tr>
+            {o.discount > 0 && <tr><td colSpan={4}>কুপন ছাড় ({o.coupon_code})</td><td className="r num">−{taka(o.discount)}</td></tr>}
             <tr className="grand"><td colSpan={4}>মোট</td><td className="r num">{taka(o.total)}</td></tr>
             <tr><td colSpan={4}>পেমেন্ট: {paymentMethodLabel[o.payment_method]} · {paymentStatusLabel[o.payment_status]}</td><td className="r num">{due > 0 ? `বাকি ${taka(due)}` : "পরিশোধিত"}</td></tr>
           </tfoot>

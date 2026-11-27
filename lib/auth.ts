@@ -22,6 +22,10 @@ export type Customer = {
   role: Role | null;
   /** True for any staff role: may open /admin (each page checks its own permission). */
   isAdmin: boolean;
+  /** Two-factor login is turned on for this account. */
+  totpEnabled: boolean;
+  /** 2FA is on but this session hasn't entered an app code yet. */
+  mfaPending: boolean;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -142,6 +146,8 @@ type CustomerRow = {
   address_parts: unknown;
   role: string | null;
   blocked_at: Date | null;
+  totp_enabled_at?: Date | null;
+  mfa_at?: Date | null;
 };
 
 /** Effective role: ADMIN_EMAILS always wins (so the owner can never lock themselves out). */
@@ -154,7 +160,11 @@ function toCustomer(r: CustomerRow): Customer {
   const role = effectiveRole(r.email, r.role);
   let addressParts: unknown = r.address_parts;
   if (typeof addressParts === "string") { try { addressParts = JSON.parse(addressParts); } catch { addressParts = null; } }
-  return { id: r.id, email: r.email, name: r.name, phone: r.phone, address: r.address, addressParts, role, isAdmin: role !== null };
+  const totpEnabled = Boolean(r.totp_enabled_at);
+  return {
+    id: r.id, email: r.email, name: r.name, phone: r.phone, address: r.address, addressParts, role, isAdmin: role !== null,
+    totpEnabled, mfaPending: totpEnabled && !r.mfa_at,
+  };
 }
 
 async function customerByEmail(email: string): Promise<Customer | null> {
@@ -167,13 +177,19 @@ export async function currentCustomer(): Promise<Customer | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const r = await selectOne<CustomerRow>(
-    `SELECT c.id, c.email, c.name, c.phone, c.address, c.address_parts, c.role, c.blocked_at
+    `SELECT c.id, c.email, c.name, c.phone, c.address, c.address_parts, c.role, c.blocked_at, c.totp_enabled_at, s.mfa_at
      FROM sessions s JOIN customers c ON c.id = s.customer_id
      WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP()`,
     [sha256(token)],
   );
   // A blocked account behaves as logged out everywhere.
   return r && !r.blocked_at ? toCustomer(r) : null;
+}
+
+/** SHA-256 of the current session token (to mark this session as 2FA-verified), or null. */
+export async function currentSessionHash(): Promise<string | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  return token ? sha256(token) : null;
 }
 
 export async function logout(): Promise<void> {

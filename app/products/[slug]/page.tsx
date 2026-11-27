@@ -14,6 +14,8 @@ import { findCategory, findProduct, getCatalog } from "@/lib/catalog";
 import { imagesFor, toCard } from "@/lib/products";
 import { publicConfig } from "@/lib/store-config";
 import { getStoreSettings } from "@/lib/store-settings";
+import { productReviews } from "@/lib/reviews";
+import { dhakaDateTime } from "@/lib/time";
 import { site, taka } from "@/lib/site";
 
 export async function generateStaticParams() {
@@ -66,6 +68,7 @@ async function ProductView({ params }: { params: PageProps<"/products/[slug]">["
   if (!cat) notFound();
 
   const related = p.related.map((s) => findProduct(catalog, s)).filter((x) => x !== undefined);
+  const rv = p.id ? await productReviews(p.id) : { count: 0, average: 0, reviews: [] };
   const { dhaka, outside } = settings.delivery;
   const faqs = [...p.faq, ...cat.faq];
   const dhakaOnly = !cat.zones.includes("outside");
@@ -81,6 +84,18 @@ async function ProductView({ params }: { params: PageProps<"/products/[slug]">["
     category: cat.label,
     brand: { "@type": "Brand", name: site.name },
     countryOfOrigin: "BD",
+    ...(rv.count > 0
+      ? {
+          aggregateRating: { "@type": "AggregateRating", ratingValue: rv.average, reviewCount: rv.count, bestRating: 5, worstRating: 1 },
+          review: rv.reviews.slice(0, 5).map((r) => ({
+            "@type": "Review",
+            reviewRating: { "@type": "Rating", ratingValue: r.rating, bestRating: 5 },
+            author: { "@type": "Person", name: r.display_name },
+            reviewBody: r.body,
+            datePublished: new Date(r.created_at).toISOString().slice(0, 10),
+          })),
+        }
+      : {}),
     offers: p.variants.map((v) => ({
       "@type": "Offer",
       name: `${p.name} ${v.label}`,
@@ -163,9 +178,22 @@ async function ProductView({ params }: { params: PageProps<"/products/[slug]">["
           </section>
           <section aria-labelledby="h-rev">
             <h2 id="h-rev" style={{ fontSize: "var(--step-1)", marginBottom: 12 }}>ক্রেতাদের মতামত</h2>
-            <div className="reviews-empty">
-              <p>এখনো কোনো রিভিউ নেই। এই পণ্য কিনেছেন এমন ক্রেতারা অ্যাকাউন্ট থেকে রিভিউ দিতে পারবেন।</p>
-            </div>
+            {rv.count === 0 ? (
+              <div className="reviews-empty">
+                <p>এখনো কোনো রিভিউ নেই। এই পণ্য কিনেছেন এমন ক্রেতারা অ্যাকাউন্ট থেকে রিভিউ দিতে পারবেন।</p>
+              </div>
+            ) : (
+              <div className="review-list">
+                <p className="review-avg"><b className="num">{rv.average.toLocaleString("bn-BD")}</b> <span aria-hidden="true">{"★".repeat(Math.round(rv.average))}</span> <span className="num">({rv.count.toLocaleString("bn-BD")}টি যাচাই করা রিভিউ)</span></p>
+                {rv.reviews.map((r) => (
+                  <article key={r.id} className="review-item">
+                    <p><b aria-label={`${r.rating}/5`}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</b> · {r.display_name} · <small>{dhakaDateTime(r.created_at)}</small> · <span className="pill">যাচাই করা ক্রেতা</span></p>
+                    <p>{r.body}</p>
+                    {r.reply && <p className="review-reply"><b>মুসুফি:</b> {r.reply}</p>}
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       </div>
