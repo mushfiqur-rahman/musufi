@@ -484,6 +484,8 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .admin-nav { display: flex; gap: 6px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
 .admin-nav a { text-decoration: none; padding: 8px 14px; border-radius: var(--r-sm); font-weight: 600; background: var(--surface); border: 1px solid var(--line); }
 .admin-nav a:hover { border-color: var(--green); color: var(--green); }
+/* Current page in the admin menu */
+.admin-nav a.is-current { background: var(--green); border-color: var(--green); color: var(--on-green); }
 .admin-head h1 { font-size: var(--step-2); }
 .admin-head .lead { color: var(--muted); margin-top: 4px; max-width: 70ch; }
 .chips a { flex: none; display: inline-flex; align-items: center; min-height: 40px; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); text-decoration: none; font-weight: 500; }
@@ -541,6 +543,7 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
   .admin-shell .admin-nav { position: sticky; top: 84px; flex-direction: column; flex-wrap: nowrap; border-bottom: 0; border-right: 1px solid var(--line); padding: 0 16px 0 0; }
   .admin-shell .admin-nav a { border: 0; background: none; padding: 9px 12px; }
   .admin-shell .admin-nav a:hover { background: var(--leaf-50); }
+  .admin-shell .admin-nav a.is-current { background: var(--green); color: var(--on-green); box-shadow: inset 4px 0 0 var(--green-deep); }
 }
 @media (max-width: 999px) { .admin-shell .admin-nav { flex-wrap: nowrap; overflow-x: auto; } .admin-shell .admin-nav a { flex: none; } }
 .admin-main { display: grid; gap: 20px; min-width: 0; }

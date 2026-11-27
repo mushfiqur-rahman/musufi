@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { currentCustomer } from "@/lib/auth";
 import { permissionsOf, roleLabel, type Permission } from "@/lib/permissions";
 import { getRoleMatrix } from "@/lib/roles";
+import { AdminNavLink } from "@/components/admin/nav-link";
 
 export const metadata: Metadata = {
   title: { default: "অ্যাডমিন", template: "%s | মুসুফি অ্যাডমিন" },
@@ -54,9 +55,9 @@ async function AdminNav() {
         <small>{roleLabel[role]}</small>
       </p>
       {NAV.filter((n) => perms.includes(n.perm)).map((n) => (
-        <Link key={n.href} href={n.href}>{n.label}</Link>
+        <AdminNavLink key={n.href} href={n.href}>{n.label}</AdminNavLink>
       ))}
-      <Link href="/admin/security">নিরাপত্তা (২-ধাপ লগইন)</Link>
+      <AdminNavLink href="/admin/security">নিরাপত্তা (২-ধাপ লগইন)</AdminNavLink>
       <Link href="/" className="admin-back">← দোকানে ফিরুন</Link>
     </nav>
   );
