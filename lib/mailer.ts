@@ -160,6 +160,23 @@ export async function sendOrderConfirmation(to: string, o: OrderAlert): Promise<
   });
 }
 
+/** Tells the customer their parcel is on the way, with the courier tracking number. */
+export async function sendShippedEmail(to: string, o: { orderNo: string; name: string; courier: string | null; trackingNo: string; total: number }): Promise<void> {
+  const courier = o.courier || "কুরিয়ার";
+  await getTransport().sendMail({
+    from: { name: site.name, address: env("SMTP_USER") },
+    to,
+    subject: `আপনার অর্ডার ${o.orderNo} পাঠানো হয়েছে`,
+    text: `${o.name}, আপনার অর্ডার ${o.orderNo} ${courier}-এ পাঠানো হয়েছে।\nট্র্যাকিং নম্বর: ${o.trackingNo}\nহাতে পেয়ে দেবেন: ${taka(o.total)}`,
+    html: shell(
+      "আপনার অর্ডার পথে আছে",
+      `<p style="margin:0 0 12px;color:#55665b">${esc(o.name)}, অর্ডার ${esc(o.orderNo)} ${esc(courier)}-এ পাঠানো হয়েছে।</p>
+       <p style="margin:0 0 12px;font-size:18px"><b>ট্র্যাকিং নম্বর: ${esc(o.trackingNo)}</b></p>
+       <p style="margin:0;color:#55665b">হাতে পেয়ে দেবেন: ${esc(taka(o.total))}। ডেলিভারির সময় পণ্য দেখে নিন।</p>`,
+    ),
+  });
+}
+
 /** Human-friendly order number, e.g. MS-261127-4F7K (date in Dhaka time). */
 export function newOrderNo(now = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Dhaka", year: "2-digit", month: "2-digit", day: "2-digit" }).formatToParts(now);

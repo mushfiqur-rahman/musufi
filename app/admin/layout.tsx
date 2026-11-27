@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 const NAV: { href: string; label: string; perm: Permission }[] = [
   { href: "/admin", label: "ড্যাশবোর্ড", perm: "dashboard.view" },
   { href: "/admin/orders", label: "অর্ডার", perm: "orders.view" },
+  { href: "/admin/customers", label: "ক্রেতা", perm: "customers.view" },
   { href: "/admin/products", label: "পণ্য", perm: "products.view" },
   { href: "/admin/categories", label: "ক্যাটাগরি", perm: "products.manage" },
   { href: "/admin/reports", label: "লাভ-ক্ষতি", perm: "reports.view" },

@@ -651,3 +651,37 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 /* Sold-out sizes */
 .sizes button.sold, .sizes button:disabled { text-decoration: line-through; opacity: 0.55; cursor: not-allowed; }
 .tag.sold { background: var(--fg); color: var(--bg); }
+
+/* Orders list extras */
+.bulk-bar { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-bottom: 10px; }
+.pager { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 8px 0; }
+.head-links { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Invoice + packing slip */
+.invoice-wrap { display: grid; gap: 20px; }
+.inv-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.inv-page { background: #fff; color: #111; border: 1px solid var(--line); border-radius: 8px; padding: 28px; display: grid; gap: 16px; max-width: 800px; }
+.inv-head { display: flex; justify-content: space-between; gap: 16px; border-bottom: 2px solid #23613f; padding-bottom: 12px; }
+.inv-head small, .inv-meta small { display: block; color: #555; font-size: 0.8rem; }
+.inv-brand { font-size: 1.5rem; color: #23613f; }
+.inv-meta { text-align: right; display: grid; }
+.inv-to p { margin: 2px 0; }
+.inv-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.inv-table th, .inv-table td { border-bottom: 1px solid #ddd; padding: 8px 6px; text-align: left; }
+.inv-table .r { text-align: right; }
+.inv-table tfoot td { border-bottom: 0; padding: 4px 6px; }
+.inv-table .grand td { font-weight: 700; font-size: 1.05rem; border-top: 2px solid #111; }
+.inv-thanks { color: #555; font-size: 0.85rem; }
+.inv-cod { font-size: 1.15rem; border: 2px dashed #111; padding: 10px; text-align: center; }
+@media print {
+  .site-header, .site-footer, .admin-nav, .fab, .no-print, .skip { display: none !important; }
+  body { background: #fff; }
+  .admin-shell { display: block; padding: 0; }
+  .inv-page { border: 0; max-width: none; padding: 0; break-after: page; }
+}
+.seg-cell { display: flex; gap: 4px; flex-wrap: wrap; }
+.pill.seg-vip { background: var(--honey); color: #3a2800; }
+.pill.seg-repeat { background: var(--leaf-50); color: var(--green); }
+.pill.seg-new { background: #eceff1; color: #455a64; }
+.pill.seg-inactive { background: var(--honey-soft); color: var(--honey-ink); }
+.pill.seg-blocked { background: #f8e3e1; color: #9b2a20; }

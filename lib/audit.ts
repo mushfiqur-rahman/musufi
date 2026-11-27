@@ -59,6 +59,8 @@ export const actionLabel: Record<string, string> = {
   "order.status": "অর্ডারের অবস্থা বদল",
   "order.note": "অর্ডারের নোট",
   "order.tracking": "ট্র্যাকিং নম্বর",
+  "order.payment": "পেমেন্ট",
+  "order.export": "অর্ডার CSV ডাউনলোড",
   "product.create": "নতুন পণ্য",
   "product.update": "পণ্য সম্পাদনা",
   "product.publish": "পণ্য প্রকাশ",

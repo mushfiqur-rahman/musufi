@@ -1,6 +1,7 @@
 // Orders, delivery-history risk, costs and settings. Server-only.
 import { execute, select, selectOne, transaction } from "./db";
 import { newOrderNo } from "./mailer";
+import { addDays, dhakaDayStartUtc, sqlUtc } from "./time";
 import type { Orderable } from "./catalog";
 import type { AddressParts } from "./geo";
 import type { DeliveryZone } from "./site";
@@ -121,40 +122,126 @@ export async function phoneRisk(phone: string, excludeOrderId?: number): Promise
 
 // ---------- Listing and detail ----------
 
+export const PAYMENT_METHODS = ["cod", "bkash", "nagad"] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+export const paymentMethodLabel: Record<PaymentMethod, string> = { cod: "ক্যাশ অন ডেলিভারি", bkash: "বিকাশ", nagad: "নগদ" };
+
+export const PAYMENT_STATUSES = ["unpaid", "paid", "refunded", "partial_refund"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+export const paymentStatusLabel: Record<PaymentStatus, string> = { unpaid: "বাকি", paid: "পরিশোধিত", refunded: "ফেরত দেওয়া", partial_refund: "আংশিক ফেরত" };
+
 export type OrderRow = {
   id: number;
   order_no: string;
+  customer_id: number;
   status: OrderStatus;
   name: string;
   phone: string;
   address: string;
+  district_id: number | null;
   zone: DeliveryZone;
   subtotal: number;
   delivery_fee: number;
   total: number;
   cost_total: number | null;
   note: string | null;
+  payment_method: PaymentMethod;
+  payment_status: PaymentStatus;
+  paid_amount: number | null;
+  refund_amount: number | null;
+  payment_ref: string | null;
+  courier: string | null;
+  tracking_no: string | null;
   created_at: Date;
+  shipped_at: Date | null;
   delivered_at: Date | null;
   email: string;
   items: string;
 };
 
 const ORDER_SELECT = `
-  SELECT o.id, o.order_no, o.status, o.name, o.phone, o.address, o.zone, o.subtotal, o.delivery_fee, o.total,
-         o.cost_total, o.note, o.created_at, o.delivered_at, c.email,
+  SELECT o.id, o.order_no, o.customer_id, o.status, o.name, o.phone, o.address, o.district_id, o.zone, o.subtotal, o.delivery_fee,
+         o.total, o.cost_total, o.note, o.payment_method, o.payment_status, o.paid_amount, o.refund_amount, o.payment_ref,
+         o.courier, o.tracking_no, o.created_at, o.shipped_at, o.delivered_at, c.email,
          (SELECT GROUP_CONCAT(CONCAT(i.product_name, ' · ', i.variant_label, ' × ', i.qty) SEPARATOR '\\n')
             FROM order_items i WHERE i.order_id = o.id) AS items
   FROM orders o JOIN customers c ON c.id = o.customer_id`;
 
-export async function listOrders(status: OrderStatus | "all", limit = 100): Promise<OrderRow[]> {
-  return status === "all"
-    ? select<OrderRow>(`${ORDER_SELECT} ORDER BY o.id DESC LIMIT ?`, [limit])
-    : select<OrderRow>(`${ORDER_SELECT} WHERE o.status = ? ORDER BY o.id DESC LIMIT ?`, [status, limit]);
+/** Filters shared by the order list, CSV export and bulk actions. */
+export type OrderFilter = {
+  q?: string; // order no, name, phone or email
+  status?: OrderStatus;
+  payment?: PaymentStatus;
+  districtId?: number;
+  customerId?: number;
+  from?: string; // Dhaka date YYYY-MM-DD, inclusive
+  to?: string; // Dhaka date YYYY-MM-DD, inclusive
+};
+
+function whereFor(f: OrderFilter): { sql: string; params: unknown[] } {
+  const where: string[] = [];
+  const params: unknown[] = [];
+  if (f.q) {
+    const like = `%${f.q.replace(/[%_\\]/g, "\\$&")}%`;
+    where.push("(o.order_no LIKE ? OR o.name LIKE ? OR o.phone LIKE ? OR c.email LIKE ?)");
+    params.push(like, like, like, like);
+  }
+  if (f.status) { where.push("o.status = ?"); params.push(f.status); }
+  if (f.payment) { where.push("o.payment_status = ?"); params.push(f.payment); }
+  if (f.districtId) { where.push("o.district_id = ?"); params.push(f.districtId); }
+  if (f.customerId) { where.push("o.customer_id = ?"); params.push(f.customerId); }
+  if (f.from) { where.push("o.created_at >= ?"); params.push(sqlUtc(dhakaDayStartUtc(f.from))); }
+  if (f.to) { where.push("o.created_at < ?"); params.push(sqlUtc(dhakaDayStartUtc(addDays(f.to, 1)))); }
+  return { sql: where.length ? " WHERE " + where.join(" AND ") : "", params };
+}
+
+export const PAGE_SIZE = 50;
+
+/** One page of orders (newest first) plus the total count for pagination. */
+export async function listOrders(f: OrderFilter = {}, page = 1, pageSize = PAGE_SIZE): Promise<{ rows: OrderRow[]; total: number }> {
+  const w = whereFor(f);
+  const [rows, count] = await Promise.all([
+    select<OrderRow>(`${ORDER_SELECT}${w.sql} ORDER BY o.id DESC LIMIT ? OFFSET ?`, [...w.params, pageSize, (Math.max(page, 1) - 1) * pageSize]),
+    selectOne<{ n: number }>(`SELECT COUNT(*) AS n FROM orders o JOIN customers c ON c.id = o.customer_id${w.sql}`, w.params),
+  ]);
+  return { rows, total: Number(count?.n ?? 0) };
+}
+
+/** All matching orders for CSV export (capped to keep memory bounded). */
+export async function exportOrders(f: OrderFilter, cap = 5000): Promise<OrderRow[]> {
+  const w = whereFor(f);
+  return select<OrderRow>(`${ORDER_SELECT}${w.sql} ORDER BY o.id DESC LIMIT ?`, [...w.params, cap]);
 }
 
 export async function customerOrders(customerId: number): Promise<OrderRow[]> {
   return select<OrderRow>(`${ORDER_SELECT} WHERE o.customer_id = ? ORDER BY o.id DESC LIMIT 50`, [customerId]);
+}
+
+/** Courier and tracking number. Returns true when the order exists. */
+export async function setShipping(orderNo: string, courier: string | null, trackingNo: string | null): Promise<boolean> {
+  const r = await execute("UPDATE orders SET courier = ?, tracking_no = ? WHERE order_no = ?", [courier, trackingNo, orderNo]);
+  return r.affectedRows === 1;
+}
+
+export async function setPayment(
+  orderNo: string,
+  p: { method: PaymentMethod; status: PaymentStatus; paid: number | null; refund: number | null; ref: string | null },
+): Promise<boolean> {
+  const r = await execute(
+    "UPDATE orders SET payment_method = ?, payment_status = ?, paid_amount = ?, refund_amount = ?, payment_ref = ? WHERE order_no = ?",
+    [p.method, p.status, p.paid, p.refund, p.ref, orderNo],
+  );
+  return r.affectedRows === 1;
+}
+
+/** Marks that the shipping email went out, so it's only sent once. */
+export async function markShippedEmail(orderNo: string): Promise<void> {
+  await execute("UPDATE orders SET shipped_email_at = UTC_TIMESTAMP() WHERE order_no = ?", [orderNo]);
+}
+
+export async function shippedEmailSent(orderNo: string): Promise<boolean> {
+  const r = await selectOne<{ at: Date | null }>("SELECT shipped_email_at AS at FROM orders WHERE order_no = ?", [orderNo]);
+  return Boolean(r?.at);
 }
 
 export async function getOrder(orderNo: string): Promise<OrderRow | null> {
@@ -189,6 +276,7 @@ export async function setStatus(orderNo: string, status: OrderStatus, note: stri
   if (!order) return false;
   if (order.status === status) return true;
   const stamp = STAMP[status];
+  const markPaid = status === "delivered";
   const restock = status === "cancelled" && (order.status === "new" || order.status === "confirmed");
   await transaction(async (conn) => {
     if (restock) {
@@ -199,7 +287,9 @@ export async function setStatus(orderNo: string, status: OrderStatus, note: stri
       );
     }
     await conn.query(
-      `UPDATE orders SET status = ?${stamp ? `, ${stamp} = COALESCE(${stamp}, UTC_TIMESTAMP())` : ""} WHERE id = ?`,
+      `UPDATE orders SET status = ?${stamp ? `, ${stamp} = COALESCE(${stamp}, UTC_TIMESTAMP())` : ""}${
+        markPaid ? ", payment_status = IF(payment_status = 'unpaid', 'paid', payment_status), paid_amount = COALESCE(paid_amount, total)" : ""
+      } WHERE id = ?`,
       [status, order.id],
     );
     await conn.query("INSERT INTO order_events (order_id, status, note, by_email) VALUES (?, ?, ?, ?)", [order.id, status, note, byEmail]);

@@ -2,9 +2,12 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { updateOrderNote, updateOrderStatus } from "@/app/admin/actions/operations";
+import { updateOrderNote, updateOrderStatus, updatePayment, updateShipping } from "@/app/admin/actions/operations";
 import { requirePermission } from "@/lib/admin";
-import { getOrder, orderEvents, phoneRisk, statusLabel, STATUSES } from "@/lib/orders";
+import {
+  getOrder, orderEvents, PAYMENT_METHODS, PAYMENT_STATUSES, paymentMethodLabel, paymentStatusLabel, phoneRisk, statusLabel, STATUSES,
+} from "@/lib/orders";
+import { can } from "@/lib/permissions";
 import { bn, taka } from "@/lib/site";
 import { dhakaDateTime } from "@/lib/time";
 
@@ -18,7 +21,8 @@ export default function AdminOrderPage({ params }: PageProps<"/admin/orders/[no]
 
 async function OrderDetail({ params }: { params: PageProps<"/admin/orders/[no]">["params"] }) {
   await connection(); // database work happens only for a real request, never while prerendering
-  await requirePermission("orders.view");
+  const me = await requirePermission("orders.view");
+  const canManage = can(me.role, "orders.manage");
   const { no } = await params;
   const o = await getOrder(decodeURIComponent(no));
   if (!o) notFound();
@@ -28,9 +32,15 @@ async function OrderDetail({ params }: { params: PageProps<"/admin/orders/[no]">
   return (
     <>
       <p className="crumbs"><Link href="/admin/orders">← সব অর্ডার</Link></p>
-      <div className="admin-head">
-        <h1 className="num">{o.order_no}</h1>
-        <p className="lead">{dhakaDateTime(o.created_at)} · <span className={`pill st-${o.status}`}>{statusLabel[o.status]}</span></p>
+      <div className="admin-head row">
+        <div>
+          <h1 className="num">{o.order_no}</h1>
+          <p className="lead">{dhakaDateTime(o.created_at)} · <span className={`pill st-${o.status}`}>{statusLabel[o.status]}</span> · {paymentStatusLabel[o.payment_status]}</p>
+        </div>
+        <div className="head-links">
+          <Link className="btn btn-ghost" href={`/admin/orders/${o.order_no}/invoice`} target="_blank">ইনভয়েস / প্যাকিং স্লিপ</Link>
+          {can(me.role, "customers.view") && <Link className="btn btn-ghost" href={`/admin/customers/${o.customer_id}`}>ক্রেতার প্রোফাইল</Link>}
+        </div>
       </div>
 
       <div className="admin-grid">
@@ -75,9 +85,53 @@ async function OrderDetail({ params }: { params: PageProps<"/admin/orders/[no]">
           </dl>
         </section>
 
+        <section className="panel" aria-labelledby="h-ship">
+          <h2 id="h-ship">কুরিয়ার ও ট্র্যাকিং</h2>
+          {canManage ? (
+            <form action={updateShipping} className="admin-form">
+              <input type="hidden" name="orderNo" value={o.order_no} />
+              <div className="grid-2">
+                <label className="mini-field"><span>কুরিয়ার</span><input name="courier" defaultValue={o.courier ?? ""} list="couriers" maxLength={40} /></label>
+                <label className="mini-field"><span>ট্র্যাকিং / কনসাইনমেন্ট নম্বর</span><input name="trackingNo" defaultValue={o.tracking_no ?? ""} maxLength={60} /></label>
+              </div>
+              <datalist id="couriers"><option value="Steadfast" /><option value="Pathao" /><option value="RedX" /><option value="Paperfly" /><option value="নিজে ডেলিভারি" /></datalist>
+              {o.status !== "shipped" && o.status !== "delivered" && (
+                <label className="mini-field check"><input type="checkbox" name="markShipped" value="1" defaultChecked={o.status === "confirmed"} /><span>সাথে অবস্থা “পাঠানো হয়েছে” করুন (ক্রেতাকে ইমেইল যাবে)</span></label>
+              )}
+              <button className="btn btn-primary" type="submit">সংরক্ষণ</button>
+            </form>
+          ) : (
+            <p>{o.courier ?? "–"} {o.tracking_no ?? ""}</p>
+          )}
+        </section>
+
+        <section className="panel" aria-labelledby="h-pay">
+          <h2 id="h-pay">পেমেন্ট</h2>
+          {canManage ? (
+            <form action={updatePayment} className="admin-form">
+              <input type="hidden" name="orderNo" value={o.order_no} />
+              <div className="grid-2">
+                <label className="mini-field"><span>উপায়</span>
+                  <select name="method" defaultValue={o.payment_method}>{PAYMENT_METHODS.map((m) => <option key={m} value={m}>{paymentMethodLabel[m]}</option>)}</select>
+                </label>
+                <label className="mini-field"><span>অবস্থা</span>
+                  <select name="payStatus" defaultValue={o.payment_status}>{PAYMENT_STATUSES.map((s) => <option key={s} value={s}>{paymentStatusLabel[s]}</option>)}</select>
+                </label>
+                <label className="mini-field"><span>পাওয়া টাকা ৳</span><input name="paid" inputMode="numeric" defaultValue={o.paid_amount ?? ""} placeholder={String(o.total)} /></label>
+                <label className="mini-field"><span>ফেরত দেওয়া ৳</span><input name="refund" inputMode="numeric" defaultValue={o.refund_amount ?? ""} /></label>
+                <label className="mini-field wide"><span>বিকাশ/নগদ লেনদেন নম্বর</span><input name="ref" defaultValue={o.payment_ref ?? ""} maxLength={60} /></label>
+              </div>
+              <button className="btn btn-primary" type="submit">সংরক্ষণ</button>
+            </form>
+          ) : (
+            <p>{paymentMethodLabel[o.payment_method]} · {paymentStatusLabel[o.payment_status]}</p>
+          )}
+          <p className="hint">ক্যাশ অন ডেলিভারির অর্ডার “ডেলিভারি হয়েছে” করলে নিজে থেকেই পরিশোধিত হয়ে যায়।</p>
+        </section>
+
         <section className="panel" aria-labelledby="h-status">
           <h2 id="h-status">অবস্থা বদলান</h2>
-          <form action={updateOrderStatus} className="admin-form">
+          {canManage ? <form action={updateOrderStatus} className="admin-form">
             <input type="hidden" name="orderNo" value={o.order_no} />
             <div className="field">
               <label htmlFor="st">নতুন অবস্থা</label>
@@ -90,19 +144,19 @@ async function OrderDetail({ params }: { params: PageProps<"/admin/orders/[no]">
               <input id="st-note" name="note" placeholder="যেমন: ফোনে কথা হয়েছে, কাল পাঠাব" />
             </div>
             <button className="btn btn-primary" type="submit">সংরক্ষণ</button>
-          </form>
+          </form> : <p>{statusLabel[o.status]}</p>}
         </section>
 
         <section className="panel" aria-labelledby="h-note">
           <h2 id="h-note">নিজের নোট</h2>
-          <form action={updateOrderNote} className="admin-form">
+          {canManage ? <form action={updateOrderNote} className="admin-form">
             <input type="hidden" name="orderNo" value={o.order_no} />
             <div className="field">
               <label htmlFor="note">শুধু আপনি দেখবেন</label>
               <textarea id="note" name="note" defaultValue={o.note ?? ""} maxLength={500} />
             </div>
             <button className="btn btn-ghost" type="submit">নোট সংরক্ষণ</button>
-          </form>
+          </form> : <p>{o.note ?? "–"}</p>}
         </section>
 
         <section className="panel" aria-labelledby="h-log">
