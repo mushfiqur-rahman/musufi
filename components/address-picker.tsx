@@ -6,7 +6,8 @@
 
 import { useEffect, useState } from "react";
 import { DIVISIONS, districtsOf, findUpazila, upazilasOf, zoneForDistrict } from "@/lib/geo";
-import { site, taka } from "@/lib/site";
+import type { PublicConfig } from "@/lib/store-config";
+import { taka } from "@/lib/site";
 
 export type AddressValue = {
   divisionId: number | "";
@@ -30,7 +31,15 @@ export function checkAddress(a: AddressValue): AddressErrors {
   return e;
 }
 
-export function AddressPicker({ id, value, onChange, errors, disabled }: { id: string; value: AddressValue; onChange: (v: AddressValue) => void; errors: AddressErrors; disabled?: boolean }) {
+export function AddressPicker({ id, value, onChange, errors, disabled, config }: {
+  id: string;
+  value: AddressValue;
+  onChange: (v: AddressValue) => void;
+  errors: AddressErrors;
+  disabled?: boolean;
+  /** Delivery zones and which districts count as Dhaka (from store settings). */
+  config: Pick<PublicConfig, "delivery" | "dhakaDistrictIds">;
+}) {
   const [unions, setUnions] = useState<[number, string][] | null>(null);
   const upazila = value.upazilaId ? findUpazila(value.upazilaId) : undefined;
 
@@ -48,7 +57,7 @@ export function AddressPicker({ id, value, onChange, errors, disabled }: { id: s
   const set = (patch: Partial<AddressValue>) => onChange({ ...value, ...patch });
   const err = (k: keyof AddressValue) => errors[k] ? <span className="err" id={`${id}-${k}-err`}>{errors[k]}</span> : null;
   const aria = (k: keyof AddressValue) => ({ "aria-invalid": Boolean(errors[k]), "aria-describedby": errors[k] ? `${id}-${k}-err` : undefined });
-  const zone = value.districtId ? zoneForDistrict(value.districtId) : null;
+  const zone = value.districtId ? zoneForDistrict(value.districtId, config.dhakaDistrictIds) : null;
 
   return (
     <fieldset className="field address-picker" disabled={disabled}>
@@ -105,7 +114,7 @@ export function AddressPicker({ id, value, onChange, errors, disabled }: { id: s
       </label>
       {zone && (
         <p className="zone-note ok-note">
-          ডেলিভারি: {site.delivery[zone].label} · {taka(site.delivery[zone].fee)} · {site.delivery[zone].days}
+          ডেলিভারি: {config.delivery[zone].label} · {taka(config.delivery[zone].fee)} · {config.delivery[zone].days}
         </p>
       )}
     </fieldset>

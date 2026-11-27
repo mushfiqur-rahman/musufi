@@ -20,6 +20,7 @@ const NAV: { href: string; label: string; perm: Permission }[] = [
   { href: "/admin/reports", label: "লাভ-ক্ষতি", perm: "reports.view" },
   { href: "/admin/expenses", label: "খরচ", perm: "finance.manage" },
   { href: "/admin/costs", label: "পার্সেল খরচ", perm: "finance.manage" },
+  { href: "/admin/settings", label: "সেটিংস", perm: "settings.manage" },
   { href: "/admin/staff", label: "স্টাফ ও ভূমিকা", perm: "staff.manage" },
   { href: "/admin/activity", label: "অ্যাক্টিভিটি লগ", perm: "audit.view" },
 ];

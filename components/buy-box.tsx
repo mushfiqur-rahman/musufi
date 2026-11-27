@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import type { Variant } from "@/lib/products";
-import { bn, site, taka, whatsappLink, type DeliveryZone } from "@/lib/site";
+import { deliveryFee, waLink, type PublicConfig } from "@/lib/store-config";
+import { bn, taka, type DeliveryZone } from "@/lib/site";
 import { zoneForDistrict } from "@/lib/geo";
 import { AddressPicker, checkAddress, emptyAddress, type AddressErrors, type AddressValue } from "./address-picker";
 import { PhoneIcon, WhatsAppIcon } from "./icons";
@@ -22,7 +23,16 @@ async function postJson(url: string, data: unknown): Promise<{ ok: boolean; stat
   return { ok: res.ok, status: res.status, body };
 }
 
-export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: string; name: string; variants: Variant[]; defaultVariant: number; zones: DeliveryZone[] }) {
+export function BuyBox({ slug, name, variants, defaultVariant, zones, config }: {
+  slug: string;
+  name: string;
+  variants: Variant[];
+  defaultVariant: number;
+  /** Zones this product's category delivers to. */
+  zones: DeliveryZone[];
+  /** Store settings the form needs (fees, Dhaka districts, contact). */
+  config: PublicConfig;
+}) {
   // Untracked stock (undefined) is always available.
   const soldOut = (x: Variant) => x.stock !== undefined && x.stock <= 0;
   const firstAvailable = soldOut(variants[defaultVariant]) ? Math.max(0, variants.findIndex((x) => !soldOut(x))) : defaultVariant;
@@ -70,10 +80,10 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
 
   const v = variants[sel];
   // The delivery zone follows the chosen district (Dhaka district = inside Dhaka).
-  const zone: DeliveryZone | null = addr.districtId ? zoneForDistrict(addr.districtId) : null;
+  const zone: DeliveryZone | null = addr.districtId ? zoneForDistrict(addr.districtId, config.dhakaDistrictIds) : null;
   const zoneAllowed = zone === null || zones.includes(zone);
-  const fee = zone ? site.delivery[zone].fee : 0;
   const subtotal = v.price * qty;
+  const fee = zone ? deliveryFee(config, zone, subtotal) : 0;
   const total = subtotal + fee;
   const busy = status.kind === "sending";
   const set = (k: keyof typeof fields) => (e: React.ChangeEvent<HTMLInputElement>) => setFields((f) => ({ ...f, [k]: e.target.value }));
@@ -202,8 +212,8 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
 
       <div className="actions">
         <a className="btn btn-primary btn-lg" href="#order">এখনই অর্ডার করুন</a>
-        <a className="btn btn-wa" href={whatsappLink(waText)} target="_blank" rel="noopener"><WhatsAppIcon />হোয়াটসঅ্যাপ</a>
-        <a className="btn btn-ghost" href={`tel:${site.phone}`}><PhoneIcon />কল করুন</a>
+        <a className="btn btn-wa" href={waLink(config.whatsapp, waText)} target="_blank" rel="noopener"><WhatsAppIcon />হোয়াটসঅ্যাপ</a>
+        <a className="btn btn-ghost" href={`tel:${config.phone}`}><PhoneIcon />কল করুন</a>
       </div>
 
       <form className="order" id="order" onSubmit={onSubmit} noValidate aria-labelledby={`${id}-oh`}>
@@ -240,7 +250,7 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
               {err("email")}
             </div>
           )}
-          <AddressPicker id={id} value={addr} onChange={(a) => { setAddr(a); setAddrErrors({}); }} errors={addrErrors} />
+          <AddressPicker id={id} config={config} value={addr} onChange={(a) => { setAddr(a); setAddrErrors({}); }} errors={addrErrors} />
           {!zones.includes("outside") && <p className="zone-note">এই পণ্য এখন শুধু ঢাকার ভেতরে ডেলিভারি হয়।</p>}
           {!zoneAllowed && <p className="notice bad" role="alert">এই ঠিকানায় এই পণ্য পাঠানো যায় না। ঢাকা জেলার ঠিকানা দিন।</p>}
         </fieldset>

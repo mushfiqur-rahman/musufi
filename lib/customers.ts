@@ -74,7 +74,7 @@ export async function listCustomers(f: { q?: string; segment?: Segment; page?: n
   const grouped = `${BASE}${where} GROUP BY c.id${having}`;
   const page = Math.max(1, f.page ?? 1);
   const [rows, count] = await Promise.all([
-    select<CustomerRow>(`${grouped} ORDER BY last_order IS NULL, last_order DESC, c.id DESC LIMIT ? OFFSET ?`, [...params, CUSTOMER_PAGE, (page - 1) * CUSTOMER_PAGE]),
+    select<CustomerRow>(`${grouped} ORDER BY MAX(o.created_at) IS NULL, MAX(o.created_at) DESC, c.id DESC LIMIT ? OFFSET ?`, [...params, CUSTOMER_PAGE, (page - 1) * CUSTOMER_PAGE]),
     selectOne<{ n: number }>(`SELECT COUNT(*) AS n FROM (${grouped}) x`, params),
   ]);
   return { rows, total: Number(count?.n ?? 0) };

@@ -12,6 +12,8 @@ import { ProductGallery } from "@/components/product-gallery";
 import { TasteProfile } from "@/components/taste-profile";
 import { findCategory, findProduct, getCatalog } from "@/lib/catalog";
 import { imagesFor, toCard } from "@/lib/products";
+import { publicConfig } from "@/lib/store-config";
+import { getStoreSettings } from "@/lib/store-settings";
 import { site, taka } from "@/lib/site";
 
 export async function generateStaticParams() {
@@ -57,14 +59,14 @@ function ProductFallback() {
 
 async function ProductView({ params }: { params: PageProps<"/products/[slug]">["params"] }) {
   const { slug } = await params;
-  const catalog = await getCatalog();
+  const [catalog, settings] = await Promise.all([getCatalog(), getStoreSettings()]);
   const p = findProduct(catalog, slug);
   if (!p) notFound();
   const cat = findCategory(catalog, p.category);
   if (!cat) notFound();
 
   const related = p.related.map((s) => findProduct(catalog, s)).filter((x) => x !== undefined);
-  const { dhaka, outside } = site.delivery;
+  const { dhaka, outside } = settings.delivery;
   const faqs = [...p.faq, ...cat.faq];
   const dhakaOnly = !cat.zones.includes("outside");
   const url = `${site.url}/products/${p.slug}`;
@@ -119,7 +121,7 @@ async function ProductView({ params }: { params: PageProps<"/products/[slug]">["
           </div>
           <p className="summary"><b>এক কথায়:</b> {p.summary}</p>
           {p.taste && <p className="taste-line" style={{ fontSize: ".95rem" }}><span>স্বাদ:</span> {p.taste.oneLine} · <a href="#h-taste">বিস্তারিত দেখুন</a></p>}
-          <BuyBox slug={p.slug} name={p.name} variants={p.variants} defaultVariant={p.defaultVariant} zones={cat.zones} />
+          <BuyBox slug={p.slug} name={p.name} variants={p.variants} defaultVariant={p.defaultVariant} zones={cat.zones} config={publicConfig(settings)} />
           <ul className="info-list">
             <li><TruckIcon /><span>{dhakaOnly ? `শুধু ${dhaka.label} ${taka(dhaka.fee)} (${dhaka.days})` : `${dhaka.label} ${taka(dhaka.fee)} (${dhaka.days}), ${outside.label} ${taka(outside.fee)} (${outside.days})`}<small>অর্ডারের পর ফোন করে নিশ্চিত করা হয়</small></span></li>
             <li><CashIcon /><span>পণ্য হাতে পেয়ে টাকা দিন<small>বিকাশ ও নগদেও দেওয়া যায়</small></span></li>

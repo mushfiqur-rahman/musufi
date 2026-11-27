@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { getCatalog } from "@/lib/catalog";
-import { bn, phoneDisplay, site, whatsappLink } from "@/lib/site";
+import { bn, site } from "@/lib/site";
+import { phoneText, waLink } from "@/lib/store-config";
+import { getStoreSettings } from "@/lib/store-settings";
 import { LogoMark, WhatsAppIcon } from "./icons";
 
 export async function SiteFooter() {
-  const { categories } = await getCatalog();
+  const [{ categories }, settings] = await Promise.all([getCatalog(), getStoreSettings()]);
+  const c = settings.contact;
   return (
     <footer className="site-footer">
       <div className="wrap cols">
@@ -37,10 +40,10 @@ export async function SiteFooter() {
         <div>
           <h2>যোগাযোগ</h2>
           <ul>
-            <li>ফোন: <a className="num" href={`tel:${site.phone}`}>{phoneDisplay}</a></li>
-            <li><a href={whatsappLink()} target="_blank" rel="noopener" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}><WhatsAppIcon width={18} height={18} />হোয়াটসঅ্যাপে লিখুন</a></li>
-            <li>{site.address}, {site.district}</li>
-            <li>{site.hours}</li>
+            <li>ফোন: <a className="num" href={`tel:${c.phone}`}>{phoneText(c.phone)}</a></li>
+            <li><a href={waLink(c.whatsapp)} target="_blank" rel="noopener" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}><WhatsAppIcon width={18} height={18} />হোয়াটসঅ্যাপে লিখুন</a></li>
+            <li>{c.address}, {c.district}</li>
+            <li>{c.hours}</li>
           </ul>
         </div>
       </div>

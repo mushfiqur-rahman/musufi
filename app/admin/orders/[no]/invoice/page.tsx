@@ -5,7 +5,9 @@ import { PrintButton } from "@/components/admin/print-button";
 import { requirePermission } from "@/lib/admin";
 import { select } from "@/lib/db";
 import { getOrder, paymentMethodLabel, paymentStatusLabel } from "@/lib/orders";
-import { bn, phoneDisplay, site, taka } from "@/lib/site";
+import { bn, site, taka } from "@/lib/site";
+import { phoneText } from "@/lib/store-config";
+import { getStoreSettings } from "@/lib/store-settings";
 import { dhakaDateTime } from "@/lib/time";
 
 export const metadata = { title: "ইনভয়েস" };
@@ -30,6 +32,7 @@ async function Invoice({ params }: { params: PageProps<"/admin/orders/[no]/invoi
     "SELECT product_name, variant_label, unit_price, qty FROM order_items WHERE order_id = ? ORDER BY id",
     [o.id],
   );
+  const phoneDisplay = phoneText((await getStoreSettings()).contact.phone);
   const due = o.payment_status === "paid" ? 0 : o.total - (o.paid_amount ?? 0);
 
   const head = (title: string) => (

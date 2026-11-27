@@ -6,7 +6,9 @@ import { createOrder, OutOfStockError } from "@/lib/orders";
 import { serverTrouble } from "@/lib/api";
 import { findDistrict, findDivision, findUpazila, formatAddress, localLabel, zoneForDistrict, type AddressParts } from "@/lib/geo";
 import { findUnion } from "@/lib/geo-unions";
-import { site, type DeliveryZone } from "@/lib/site";
+import { deliveryFee, zoneFor } from "@/lib/store-config";
+import { loadStoreSettingsFresh } from "@/lib/store-settings";
+import type { DeliveryZone } from "@/lib/site";
 
 const BD_MOBILE = /^01[3-9]\d{8}$/;
 
@@ -136,15 +138,18 @@ export async function POST(request: Request) {
   // Prices, stock and zones come fresh from the database, never from the browser.
   const o = result.order;
   let product: Orderable | null;
+  let settings;
   try {
-    product = await loadOrderable(o.slug);
+    [product, settings] = await Promise.all([loadOrderable(o.slug), loadStoreSettingsFresh()]);
+    // Zone from the district list in settings (which districts count as "inside Dhaka").
+    o.zone = zoneFor(settings, o.parts.districtId);
   } catch (e) {
     return serverTrouble("order-product", e);
   }
   const problem = checkProduct(product, o);
   if (problem || !product) return Response.json({ message: problem }, { status: 409 });
   const v = product.variants[o.variant];
-  const zone = site.delivery[o.zone];
+  const zone = { label: settings.delivery[o.zone].label, fee: deliveryFee(settings, o.zone, v.price * o.qty) };
 
   let saved: { orderNo: string; total: number };
   try {

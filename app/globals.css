@@ -685,3 +685,4 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .pill.seg-new { background: #eceff1; color: #455a64; }
 .pill.seg-inactive { background: var(--honey-soft); color: var(--honey-ink); }
 .pill.seg-blocked { background: #f8e3e1; color: #9b2a20; }
+.district-picker details { border-top: 1px solid var(--line); padding: 6px 0; } .district-picker summary { cursor: pointer; font-weight: 600; padding: 4px 0; }

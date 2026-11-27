@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { customerBlock, customerNotes } from "@/app/admin/actions/operations";
 import { requirePermission } from "@/lib/admin";
+import { isAdminEmail } from "@/lib/auth";
 import { getCustomer, segmentLabel, segmentsOf } from "@/lib/customers";
 import { customerOrders, paymentStatusLabel, phoneRisk, statusLabel } from "@/lib/orders";
 import { can } from "@/lib/permissions";
@@ -67,7 +68,7 @@ async function Profile({ params }: { params: PageProps<"/admin/customers/[id]">[
                 <label className="mini-field"><span>শুধু স্টাফ দেখবেন</span><textarea name="notes" defaultValue={c.notes ?? ""} maxLength={1000} /></label>
                 <button className="btn btn-ghost" type="submit">নোট সংরক্ষণ</button>
               </form>
-              {!c.role && (
+              {!c.role && !isAdminEmail(c.email) && c.id !== me.id && (
                 <form action={customerBlock} className="danger-zone">
                   <input type="hidden" name="id" value={c.id} />
                   {c.blocked_at ? (

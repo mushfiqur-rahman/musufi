@@ -6,13 +6,16 @@ import { ProductPhoto } from "@/components/product-photo";
 import { ProductShelf } from "@/components/product-shelf";
 import { getCatalog, productsInCategory } from "@/lib/catalog";
 import { toCard } from "@/lib/products";
-import { bn, site, taka, whatsappLink } from "@/lib/site";
+import { bn, site, taka } from "@/lib/site";
+import { paymentNames, waLink, type StoreSettings } from "@/lib/store-config";
+import { getStoreSettings } from "@/lib/store-settings";
 
-const { dhaka, outside } = site.delivery;
 
 // Home page is organised as the questions a first-time visitor asks, in order.
 // Each section heading is the question; the line under it is the direct answer.
-const faqs: QA[] = [
+function faqsFor(s: StoreSettings): QA[] {
+  const { dhaka, outside } = s.delivery;
+  return [
   {
     q: "মুসুফি কী?",
     a: "মুসুফি একটি বাংলাদেশি অনলাইন শপ। আমরা খুলনা অঞ্চলের লোনা পানির মাছ ও চিংড়ি, খুলনার চুইঝাল, মধু, ঘানির সরিষার তেল, ঘি আর ঘরে তৈরি আচার ও গুড় বিক্রি করি। প্রতিটি পণ্যের উৎস পণ্যের পেজে লেখা থাকে।",
@@ -34,9 +37,12 @@ const faqs: QA[] = [
     a: "প্রতিটি পণ্যের পেজে স্বাদের মাপ (মিষ্টি, টক, ঝাল, ঝাঁঝ), মুখে কেমন লাগে, ঘ্রাণ আর কী দিয়ে খেতে ভালো লাগে তা লেখা আছে।",
   },
 ];
+}
 
 export default async function Home() {
-  const catalog = await getCatalog();
+  const [catalog, settings] = await Promise.all([getCatalog(), getStoreSettings()]);
+  const { dhaka, outside } = settings.delivery;
+  const faqs = faqsFor(settings);
   const { categories, products } = catalog;
   // Featured = first product in the admin's sort order.
   const featured = products[0];
@@ -73,7 +79,7 @@ export default async function Home() {
               <p className="hp-price num"><b>{taka(fv.price)}</b> <span>{fv.label}</span></p>
               <div className="hp-actions">
                 <Link className="btn btn-primary" href={`/products/${featured.slug}#order`}>অর্ডার করুন</Link>
-                <a className="btn btn-ghost" href={whatsappLink(`আসসালামু আলাইকুম, ${featured.name} সম্পর্কে জানতে চাই।`)} target="_blank" rel="noopener"><WhatsAppIcon />প্রশ্ন করুন</a>
+                <a className="btn btn-ghost" href={waLink(settings.contact.whatsapp, `আসসালামু আলাইকুম, ${featured.name} সম্পর্কে জানতে চাই।`)} target="_blank" rel="noopener"><WhatsAppIcon />প্রশ্ন করুন</a>
               </div>
             </div>
           </article>
@@ -162,7 +168,7 @@ export default async function Home() {
               </tbody>
             </table>
             <div className="pay" aria-label="পেমেন্টের উপায়">
-              {site.payments.map((p) => <span key={p}>{p}</span>)}
+              {paymentNames(settings.payments).map((p) => <span key={p}>{p}</span>)}
             </div>
           </aside>
           <article className="panel" id="story" aria-labelledby="h-story">
@@ -170,9 +176,9 @@ export default async function Home() {
             <div className="who">
               <div className="avatar">আপনার ছবি</div>
               <div>
-                <b>{site.founder}</b>
+                <b>{settings.contact.founder}</b>
                 <br />
-                <span style={{ color: "var(--muted)", fontSize: ".9rem" }}>প্রতিষ্ঠাতা, মুসুফি · {site.district}</span>
+                <span style={{ color: "var(--muted)", fontSize: ".9rem" }}>প্রতিষ্ঠাতা, মুসুফি · {settings.contact.district}</span>
               </div>
             </div>
             {/* TODO: owner's own words — why they started, how products are chosen. */}

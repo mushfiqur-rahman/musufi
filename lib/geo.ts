@@ -42,9 +42,12 @@ export const findDivision = (id: number) => DIVISIONS.find((d) => d.id === id);
 export const findDistrict = (id: number) => DISTRICTS.find((d) => d.id === id);
 export const findUpazila = (id: number) => UPAZILAS.find((u) => u.id === id);
 
-/** Delivery zone from the district: Dhaka district = "dhaka", everywhere else "outside". */
-export function zoneForDistrict(districtId: number): DeliveryZone {
-  return districtId === DHAKA_DISTRICT_ID ? "dhaka" : "outside";
+/**
+ * Delivery zone from the district. `dhakaIds` comes from store settings
+ * (default: Dhaka district only); everything else is "outside".
+ */
+export function zoneForDistrict(districtId: number, dhakaIds: number[] = [DHAKA_DISTRICT_ID]): DeliveryZone {
+  return dhakaIds.includes(districtId) ? "dhaka" : "outside";
 }
 
 /** The structured address the order form sends. */

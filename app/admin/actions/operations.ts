@@ -5,7 +5,7 @@
 import { refresh } from "next/cache";
 import { assertPermission } from "@/lib/admin";
 import { audit } from "@/lib/audit";
-import { normalizeEmail } from "@/lib/auth";
+import { isAdminEmail, normalizeEmail } from "@/lib/auth";
 import { execute, selectOne } from "@/lib/db";
 import { setBlocked, setCustomerNotes } from "@/lib/customers";
 import { smtpReady, sendShippedEmail } from "@/lib/mailer";
@@ -99,6 +99,9 @@ export async function customerBlock(form: FormData): Promise<void> {
   const me = await assertPermission("customers.manage");
   const id = wholeNumber(form.get("id"), "id", { min: 1, max: 100_000_000, required: true })!;
   const block = form.get("block") === "1";
+  // Never lock out yourself or an owner from ADMIN_EMAILS.
+  const target = await selectOne<{ email: string }>("SELECT email FROM customers WHERE id = ?", [id]);
+  if (!target || (block && (id === me.id || isAdminEmail(target.email)))) return;
   if (await setBlocked(id, block)) await audit(me, block ? "customer.block" : "customer.unblock", "customer", id);
   refresh();
 }
