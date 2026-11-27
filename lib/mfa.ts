@@ -95,5 +95,5 @@ export function tooManyAttempts(customerId: number): boolean {
 
 /** App codes as typed: strips spaces, accepts Bangla digits. */
 export function normalizeCode(v: unknown): string {
-  return String(v ?? "").replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d))).replace(/s+/g, "");
+  return String(v ?? "").replace(/[০-৯]/g, (d) => String("০১২৩৪৫৬৭৮৯".indexOf(d))).replace(/\s+/g, "");
 }
