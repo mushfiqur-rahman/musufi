@@ -29,7 +29,8 @@ function pool(): Pool {
     password: env("DB_PASSWORD"),
     database: env("DB_NAME"),
     connectionLimit: 5,
-    connectTimeout: 15_000,
+    // Fail fast: a page should not hang for 15 s if the database is unreachable.
+    connectTimeout: 5_000,
     // Reuse warm connections instead of reconnecting (a new connection costs a full handshake).
     enableKeepAlive: true,
     keepAliveInitialDelay: 10_000,
