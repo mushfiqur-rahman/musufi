@@ -75,7 +75,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 88px; }
 body {
   background: var(--bg);
   color: var(--fg);
-  font-family: var(--font-poppins), var(--font-hind), "Noto Sans Bengali", system-ui, sans-serif;
+  font-family: var(--font-poppins), var(--font-bangla), "Noto Serif Bengali", "Noto Sans Bengali", system-ui, sans-serif;
   font-size: var(--step-0);
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
@@ -727,3 +727,16 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .steps-list { display: grid; gap: 10px; padding-left: 1.3em; margin: 0; }
 .totp-secret { display: block; margin-top: 6px; padding: 10px 12px; background: var(--leaf-50); border-radius: var(--r-sm); font-size: 1.05rem; letter-spacing: 0.08em; user-select: all; }
 .totp-field input { max-width: 220px; font-size: 1.25rem; letter-spacing: 0.2em; }
+
+/* ---------- Password login ---------- */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 72px; }
+.pw-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); min-height: 40px; }
+.login-switch { text-align: center; color: var(--muted); }
+.pw-panel > summary { cursor: pointer; list-style: none; }
+.pw-panel > summary h2 { display: inline; }
+.pw-panel > summary::-webkit-details-marker { display: none; }
+.pw-panel > summary::after { content: " ▾"; color: var(--muted); }
+.perm-table td { text-align: center; }
+.perm-check { width: 22px; height: 22px; accent-color: var(--green); cursor: pointer; }
+.perm-check:disabled { cursor: not-allowed; opacity: 0.55; }

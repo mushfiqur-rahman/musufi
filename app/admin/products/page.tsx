@@ -21,7 +21,7 @@ export default function ProductsPage({ searchParams }: PageProps<"/admin/product
 async function Products({ searchParams }: { searchParams: PageProps<"/admin/products">["searchParams"] }) {
   await connection();
   const me = await requirePermission("products.view");
-  const canEdit = can(me.role, "products.manage");
+  const canEdit = can(me, "products.manage");
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim().slice(0, 80) : "";
   const statusRaw = typeof sp.status === "string" ? sp.status : "";

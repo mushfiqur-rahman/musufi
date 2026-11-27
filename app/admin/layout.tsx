@@ -3,7 +3,8 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { currentCustomer } from "@/lib/auth";
-import { can, roleLabel, type Permission } from "@/lib/permissions";
+import { permissionsOf, roleLabel, type Permission } from "@/lib/permissions";
+import { getRoleMatrix } from "@/lib/roles";
 
 export const metadata: Metadata = {
   title: { default: "অ্যাডমিন", template: "%s | মুসুফি অ্যাডমিন" },
@@ -45,13 +46,14 @@ async function AdminNav() {
   // Pages redirect visitors without access; the menu just stays empty for them.
   if (!me?.role) return <nav className="admin-nav" aria-label="অ্যাডমিন মেনু" />;
   const role = me.role;
+  const perms = permissionsOf(await getRoleMatrix(), role);
   return (
     <nav className="admin-nav" aria-label="অ্যাডমিন মেনু">
       <p className="admin-who">
         <b>{me.name || me.email}</b>
         <small>{roleLabel[role]}</small>
       </p>
-      {NAV.filter((n) => can(role, n.perm)).map((n) => (
+      {NAV.filter((n) => perms.includes(n.perm)).map((n) => (
         <Link key={n.href} href={n.href}>{n.label}</Link>
       ))}
       <Link href="/admin/security">নিরাপত্তা (২-ধাপ লগইন)</Link>

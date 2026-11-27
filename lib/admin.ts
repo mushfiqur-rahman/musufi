@@ -3,9 +3,15 @@
 // (lib/permissions.ts) and cannot be skipped by calling an action directly.
 import { redirect } from "next/navigation";
 import { currentCustomer, type Customer } from "./auth";
-import { can, type Permission } from "./permissions";
+import { can, permissionsOf, type Permission } from "./permissions";
+import { getRoleMatrix } from "./roles";
 
-export type Staff = Customer & { role: NonNullable<Customer["role"]> };
+/** A logged-in staff member with the permissions their role has right now. */
+export type Staff = Customer & { role: NonNullable<Customer["role"]>; permissions: readonly Permission[] };
+
+async function withPermissions(me: Customer): Promise<Staff> {
+  return { ...me, role: me.role!, permissions: permissionsOf(await getRoleMatrix(), me.role) };
+}
 
 /**
  * For PAGES: returns the staff member, or redirects
@@ -17,8 +23,9 @@ export async function requirePermission(permission: Permission): Promise<Staff> 
   if (!me.role) redirect("/account");
   // Two-factor login: staff with 2FA on must enter an app code in this session first.
   if (me.mfaPending) redirect("/admin/verify");
-  if (!can(me.role, permission)) redirect("/admin?denied=1");
-  return me as Staff;
+  const staff = await withPermissions(me);
+  if (!can(staff, permission)) redirect("/admin?denied=1");
+  return staff;
 }
 
 export class ForbiddenError extends Error {
@@ -31,8 +38,10 @@ export class ForbiddenError extends Error {
  */
 export async function assertPermission(permission: Permission): Promise<Staff> {
   const me = await currentCustomer();
-  if (!me?.role || me.mfaPending || !can(me.role, permission)) throw new ForbiddenError("Not allowed: " + permission);
-  return me as Staff;
+  if (!me?.role || me.mfaPending) throw new ForbiddenError("Not allowed: " + permission);
+  const staff = await withPermissions(me);
+  if (!can(staff, permission)) throw new ForbiddenError("Not allowed: " + permission);
+  return staff;
 }
 
 /**
@@ -43,14 +52,14 @@ export async function requireStaff(): Promise<Staff> {
   const me = await currentCustomer();
   if (!me) redirect("/login");
   if (!me.role) redirect("/account");
-  return me as Staff;
+  return withPermissions(me);
 }
 
 /** Server-action twin of requireStaff (no 2FA check). */
 export async function assertStaff(): Promise<Staff> {
   const me = await currentCustomer();
   if (!me?.role) throw new ForbiddenError("Not staff");
-  return me as Staff;
+  return withPermissions(me);
 }
 
 /** @deprecated use requirePermission with a specific permission */

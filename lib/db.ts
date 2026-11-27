@@ -22,6 +22,11 @@ function pool(): Pool {
     database: env("DB_NAME"),
     connectionLimit: 5,
     connectTimeout: 15_000,
+    // Reuse warm connections instead of reconnecting (a new connection costs a full handshake).
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10_000,
+    maxIdle: 5,
+    idleTimeout: 300_000,
     charset: "utf8mb4",
     timezone: "Z", // DATETIME values are UTC
     dateStrings: false,

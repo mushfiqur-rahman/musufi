@@ -23,7 +23,7 @@ export default function OrdersPage({ searchParams }: PageProps<"/admin/orders">)
 async function Orders({ searchParams }: { searchParams: PageProps<"/admin/orders">["searchParams"] }) {
   await connection();
   const me = await requirePermission("orders.view");
-  const canManage = can(me.role, "orders.manage");
+  const canManage = can(me, "orders.manage");
   const sp = await searchParams;
   const f = parseOrderFilter(sp);
   const page = Math.max(1, Math.min(10_000, Number(sp.page) || 1));

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Hind_Siliguri, Poppins } from "next/font/google";
+import { Noto_Serif_Bengali, Poppins } from "next/font/google";
 import { JsonLd } from "@/components/json-ld";
 import { WhatsAppIcon } from "@/components/icons";
 import { SiteFooter } from "@/components/site-footer";
@@ -12,18 +12,23 @@ import { getAnnouncement } from "@/lib/content";
 import Link from "next/link";
 import "./globals.css";
 
-// Poppins draws Latin letters and digits; Hind Siliguri (same foundry) draws Bangla.
+// Poppins draws Latin letters and digits; Noto Serif Bengali draws Bangla.
 const poppins = Poppins({
   variable: "--font-poppins",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  // Two weights only (fewer font files = faster first load); CSS 500/700 use the nearest.
+  weight: ["400", "600"],
   display: "swap",
+  // The site is Bangla, so Latin glyphs are rare; don't make the first paint wait on them.
+  preload: false,
 });
 
-const hind = Hind_Siliguri({
-  variable: "--font-hind",
+// Variable font: one file covers every weight (400–700 used), so it is lighter
+// than loading separate weights. Preloaded because almost all text is Bangla.
+const bangla = Noto_Serif_Bengali({
+  variable: "--font-bangla",
   subsets: ["bengali"],
-  weight: ["400", "500", "600", "700"],
+  weight: "variable",
   display: "swap",
 });
 
@@ -74,7 +79,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const [{ categories }, settings, announcement] = await Promise.all([getCatalog(), getStoreSettings(), getAnnouncement()]);
   const orgJsonLd = storeJsonLd(settings.contact.phone, paymentNames(settings.payments));
   return (
-    <html lang="bn" data-scroll-behavior="smooth" className={`${poppins.variable} ${hind.variable}`}>
+    <html lang="bn" data-scroll-behavior="smooth" className={`${poppins.variable} ${bangla.variable}`}>
       <body>
         <a className="skip" href="#main">মূল অংশে যান</a>
         {announcement.active && announcement.text && (

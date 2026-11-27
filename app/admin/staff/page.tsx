@@ -6,27 +6,14 @@ import { StaffForm } from "@/components/admin/staff-form";
 import { requirePermission } from "@/lib/admin";
 import { effectiveRole, isAdminEmail } from "@/lib/auth";
 import { select } from "@/lib/db";
-import { PERMISSIONS, can, roleDescription, roleLabel, ROLES, type Permission } from "@/lib/permissions";
+import { roleDescription, roleLabel, ROLES } from "@/lib/permissions";
+import { getRoleMatrix } from "@/lib/roles";
+import { PermissionMatrix } from "@/components/admin/permission-matrix";
 import { dhakaDateTime } from "@/lib/time";
 
 export const metadata = { title: "স্টাফ ও ভূমিকা" };
 
-const permLabel: Record<Permission, string> = {
-  "dashboard.view": "ড্যাশবোর্ড",
-  "orders.view": "অর্ডার দেখা",
-  "orders.manage": "অর্ডার বদলানো",
-  "customers.view": "ক্রেতা দেখা",
-  "customers.manage": "ক্রেতা ব্লক/নোট",
-  "products.view": "পণ্য দেখা",
-  "products.manage": "পণ্য ও ক্যাটাগরি সম্পাদনা",
-  "reports.view": "লাভ-ক্ষতি",
-  "finance.manage": "খরচ ও কেনা দাম",
-  "content.manage": "পেজ ও ঘোষণা",
-  "marketing.manage": "কুপন ও রিভিউ",
-  "settings.manage": "সেটিংস",
-  "staff.manage": "স্টাফ পরিচালনা",
-  "audit.view": "অ্যাক্টিভিটি লগ",
-};
+
 
 export default function StaffPage({ searchParams }: PageProps<"/admin/staff">) {
   return (
@@ -97,16 +84,8 @@ async function Staff({ searchParams }: { searchParams: PageProps<"/admin/staff">
 
       <section className="panel" aria-labelledby="h-roles">
         <h2 id="h-roles">কোন ভূমিকা কী করতে পারে</h2>
-        <div className="table-wrap">
-          <table className="admin-table perm-table">
-            <thead><tr><th scope="col">কাজ</th>{ROLES.map((r) => <th key={r} scope="col">{roleLabel[r]}</th>)}</tr></thead>
-            <tbody>
-              {PERMISSIONS.map((p) => (
-                <tr key={p}><th scope="row">{permLabel[p]}</th>{ROLES.map((r) => <td key={r} aria-label={can(r, p) ? "হ্যাঁ" : "না"}>{can(r, p) ? "✓" : "–"}</td>)}</tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <p className="hint">টিক দিয়ে ঠিক করুন কোন ভূমিকা কী করতে পারবে, তারপর সংরক্ষণ করুন। মালিকের কলাম বদলানো যায় না; স্টাফ পরিচালনা শুধু মালিকের।</p>
+        <PermissionMatrix matrix={await getRoleMatrix()} />
         <ul className="hint role-notes">{ROLES.map((r) => <li key={r}><b>{roleLabel[r]}:</b> {roleDescription[r]}</li>)}</ul>
       </section>
     </>

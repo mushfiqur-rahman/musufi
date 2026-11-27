@@ -22,7 +22,7 @@ export default function AdminOrderPage({ params }: PageProps<"/admin/orders/[no]
 async function OrderDetail({ params }: { params: PageProps<"/admin/orders/[no]">["params"] }) {
   await connection(); // database work happens only for a real request, never while prerendering
   const me = await requirePermission("orders.view");
-  const canManage = can(me.role, "orders.manage");
+  const canManage = can(me, "orders.manage");
   const { no } = await params;
   const o = await getOrder(decodeURIComponent(no));
   if (!o) notFound();
@@ -39,7 +39,7 @@ async function OrderDetail({ params }: { params: PageProps<"/admin/orders/[no]">
         </div>
         <div className="head-links">
           <Link className="btn btn-ghost" href={`/admin/orders/${o.order_no}/invoice`} target="_blank">ইনভয়েস / প্যাকিং স্লিপ</Link>
-          {can(me.role, "customers.view") && <Link className="btn btn-ghost" href={`/admin/customers/${o.customer_id}`}>ক্রেতার প্রোফাইল</Link>}
+          {can(me, "customers.view") && <Link className="btn btn-ghost" href={`/admin/customers/${o.customer_id}`}>ক্রেতার প্রোফাইল</Link>}
         </div>
       </div>
 

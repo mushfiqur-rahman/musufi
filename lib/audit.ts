@@ -86,5 +86,6 @@ export const actionLabel: Record<string, string> = {
   "announcement.save": "ঘোষণা",
   "2fa.enable": "২-ধাপ লগইন চালু",
   "2fa.disable": "২-ধাপ লগইন বন্ধ",
+  "roles.update": "ভূমিকার অনুমতি বদল",
   "2fa.reset": "২-ধাপ লগইন রিসেট (মালিক)",
 };

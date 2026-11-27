@@ -45,8 +45,8 @@ async function Dashboard({ searchParams }: { searchParams: PageProps<"/admin">["
   const me = await requirePermission("dashboard.view");
   const sp = await searchParams;
   const days = RANGES.find((r) => String(r) === sp.range) ?? 30;
-  const showMoney = can(me.role, "orders.view");
-  const showStock = can(me.role, "products.view");
+  const showMoney = can(me, "orders.view");
+  const showStock = can(me, "products.view");
 
   const [kpis, series, todos, counts, top, customers, recent, fresh, low] = await Promise.all([
     showMoney ? dashboardKpis() : null,
@@ -54,9 +54,9 @@ async function Dashboard({ searchParams }: { searchParams: PageProps<"/admin">["
     showMoney ? todoCounts() : null,
     showMoney ? statusCounts() : null,
     showMoney ? topProducts(30) : null,
-    can(me.role, "customers.view") ? topCustomers() : null,
+    can(me, "customers.view") ? topCustomers() : null,
     showMoney ? recentOrders() : null,
-    can(me.role, "customers.view") ? newCustomers() : null,
+    can(me, "customers.view") ? newCustomers() : null,
     showStock ? lowStockVariants(8) : null,
   ]);
 

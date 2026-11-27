@@ -49,6 +49,9 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones, config }: 
   const [errors, setErrors] = useState<Partial<Record<"name" | "phone" | "email", string>>>({});
   const [addrErrors, setAddrErrors] = useState<AddressErrors>({});
   const [step, setStep] = useState<"form" | "code">("form");
+  // Returning customers may log in with their password instead of an email code.
+  const [usePw, setUsePw] = useState(false);
+  const [pw, setPw] = useState("");
   const [code, setCode] = useState("");
   // Coupon: what the customer typed, and the server's preview of it.
   const [couponInput, setCouponInput] = useState("");
@@ -183,7 +186,21 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones, config }: 
     }
     if (!check()) return;
     if (me) await placeOrder();
+    else if (usePw) await passwordLoginThenOrder();
     else await requestCode();
+  }
+
+  async function passwordLoginThenOrder() {
+    setStatus({ kind: "sending" });
+    try {
+      const r = await postJson("/api/auth/password", { email: fields.email.trim(), password: pw });
+      if (!r.ok) { setStatus({ kind: "bad", text: String(r.body.message) }); return; }
+      setMe((r.body.customer as Me) ?? { email: fields.email.trim(), name: null, phone: null, address: null });
+      setPw("");
+      await placeOrder();
+    } catch {
+      setStatus({ kind: "bad", text: "ইন্টারনেট সংযোগ পাওয়া যায়নি। আবার চেষ্টা করুন।" });
+    }
   }
 
   async function switchAccount() {
@@ -271,8 +288,20 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones, config }: 
             <div className="field">
               <label htmlFor={`${id}-email`}>ইমেইল</label>
               <input id={`${id}-email`} value={fields.email} onChange={set("email")} type="email" inputMode="email" autoComplete="email" placeholder="name@gmail.com" aria-invalid={!!errors.email} aria-describedby={described("email", `${id}-eh`)} />
-              <span className="hint" id={`${id}-eh`}>এই ইমেইলে একটি কোড যাবে। এতে আপনার অ্যাকাউন্ট খুলবে, পরে অর্ডারের অবস্থা দেখতে পারবেন।</span>
+              <span className="hint" id={`${id}-eh`}>{usePw ? "আপনার অ্যাকাউন্টের ইমেইল।" : "এই ইমেইলে একটি কোড যাবে। এতে আপনার অ্যাকাউন্ট খুলবে, পরে অর্ডারের অবস্থা দেখতে পারবেন।"}</span>
               {err("email")}
+            </div>
+          )}
+          {!me && (
+            <label className="mini-field check pw-choice">
+              <input type="checkbox" checked={usePw} onChange={(e) => setUsePw(e.target.checked)} />
+              <span>আমার পাসওয়ার্ড আছে</span>
+            </label>
+          )}
+          {!me && usePw && (
+            <div className="field">
+              <label htmlFor={`${id}-pw`}>পাসওয়ার্ড</label>
+              <input id={`${id}-pw`} type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} maxLength={128} />
             </div>
           )}
           <AddressPicker id={id} config={config} value={addr} onChange={(a) => { setAddr(a); setAddrErrors({}); }} errors={addrErrors} />
@@ -320,8 +349,8 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones, config }: 
           </div>
         )}
 
-        <button className="btn btn-primary btn-lg" type="submit" disabled={busy || allSoldOut || soldOut(v) || status.kind === "ok" || (step === "code" && code.length !== 6)}>
-          {busy ? "অপেক্ষা করুন..." : step === "code" ? "কোড মিলিয়ে অর্ডার করুন" : me ? "অর্ডার নিশ্চিত করুন" : "কোড পাঠিয়ে অর্ডার করুন"}
+        <button className="btn btn-primary btn-lg" type="submit" disabled={busy || allSoldOut || soldOut(v) || status.kind === "ok" || (step === "code" && code.length !== 6) || (!me && usePw && step === "form" && !pw)}>
+          {busy ? "অপেক্ষা করুন..." : step === "code" ? "কোড মিলিয়ে অর্ডার করুন" : me ? "অর্ডার নিশ্চিত করুন" : usePw ? "লগইন করে অর্ডার করুন" : "কোড পাঠিয়ে অর্ডার করুন"}
         </button>
         {(status.kind === "ok" || status.kind === "bad" || status.kind === "info") && (
           <p className={`notice ${status.kind === "info" ? "ok" : status.kind}`} role="status">

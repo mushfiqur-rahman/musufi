@@ -3,7 +3,7 @@ import { LoginForm } from "@/components/login-form";
 
 export const metadata: Metadata = {
   title: "লগইন",
-  description: "ইমেইলে পাঠানো কোড দিয়ে মুসুফি অ্যাকাউন্টে লগইন করুন। কোনো পাসওয়ার্ড লাগে না।",
+  description: "ইমেইল আর পাসওয়ার্ড দিয়ে মুসুফি অ্যাকাউন্টে লগইন করুন।",
   robots: { index: false },
 };
 
@@ -12,7 +12,7 @@ export default function LoginPage() {
     <div className="wrap auth-page">
       <div className="auth-intro">
         <h1>লগইন</h1>
-        <p className="lead">পাসওয়ার্ড লাগবে না। আপনার ইমেইলে একটি ৬ সংখ্যার কোড যাবে, সেটি লিখলেই লগইন। নতুন হলে অ্যাকাউন্ট নিজে থেকেই খুলে যাবে।</p>
+        <p className="lead">ইমেইল আর পাসওয়ার্ড দিয়ে লগইন করুন। প্রথমবার বা পাসওয়ার্ড ভুলে গেলে ইমেইলে কোড নিন; কোড দিলেই অ্যাকাউন্ট খুলে যাবে, তারপর নিজের পাসওয়ার্ড সেট করে নিন।</p>
       </div>
       <LoginForm />
     </div>

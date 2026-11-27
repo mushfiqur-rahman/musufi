@@ -9,7 +9,8 @@ Read it before adding a page, a permission or a database change.
 |---|---|---|
 | Roles and permissions | `lib/permissions.ts` | The only place that says which role may do what. Pure data, safe anywhere. |
 | Access gate | `lib/admin.ts` | `requirePermission()` for pages (redirects), `assertPermission()` for server actions (throws). |
-| Login and sessions | `lib/auth.ts` | Email codes, session cookie, effective role (`ADMIN_EMAILS` → owner). |
+| Login and sessions | `lib/auth.ts`, `lib/password.ts` | Email + password (scrypt); email code for first login and forgotten passwords; session cookie; effective role (`ADMIN_EMAILS` → owner). |
+| Role table | `lib/roles.ts` | Owner-edited role → permissions table (settings row `roles`, tag `roles`). |
 | Activity log | `lib/audit.ts` | `audit()` after every admin change; `listAudit()` for the log page. |
 | Input checks | `lib/validate.ts` | Shared validators and `actionError()` (safe error messages). |
 | Public catalogue | `lib/catalog.ts` | `getCatalog()` (cached, tag `catalog`), `loadOrderable()` (fresh, for checkout). |
@@ -28,7 +29,11 @@ Read it before adding a page, a permission or a database change.
 
 ## Roles
 
-Defined in `lib/permissions.ts` (`ROLE_PERMISSIONS`). Owners listed in the
+The owner ticks which role may do what on **Admin → স্টাফ ও ভূমিকা**. The table
+is saved in the database (`lib/roles.ts`); until it is first saved, the
+defaults in `lib/permissions.ts` (`DEFAULT_ROLE_PERMISSIONS`, shown below) apply.
+The owner column is always full and locked, and `staff.manage` (which includes
+editing this table) can never be given to another role. Owners listed in the
 `ADMIN_EMAILS` environment variable are always `owner`, whatever the database
 says, so the owner can never lock themselves out.
 
@@ -46,8 +51,8 @@ says, so the owner can never lock themselves out.
 | settings.manage, staff.manage | ✓ | – | – | – |
 | audit.view | ✓ | ✓ | – | – |
 
-Staff are added on **Admin → স্টাফ ও ভূমিকা** by email. They log in with their
-own email code. Removing a staff member also ends their sessions.
+Staff are added on **Admin → স্টাফ ও ভূমিকা** by email. The first time, they log
+in with an email code and then set their own password. Removing a staff member also ends their sessions.
 
 ### Two-factor login (2FA)
 
@@ -93,7 +98,12 @@ migration that has already been applied; add a new one.
 
 ## Security summary
 
-- Login: 6-digit email codes, HMAC-hashed, 10 minutes, 5 attempts, a new code
+- Login: email + password (scrypt, N=2^15, salted; min 8 characters). 5 wrong
+  passwords per email (20 per IP) in 15 minutes locks password login for that
+  window; the error never says whether the account exists. Changing the password
+  signs out other sessions; it needs the old password unless the session came
+  from an email code in the last 30 minutes (the "forgot password" path).
+- Email codes: 6 digits, HMAC-hashed, 10 minutes, 5 attempts, a new code
   cancels older ones, rate-limited per email and IP. Blocked accounts can't log in.
 - Session: random 32-byte token in an HttpOnly, SameSite=Lax cookie (Secure in
   production); only its SHA-256 is stored. 30 days.

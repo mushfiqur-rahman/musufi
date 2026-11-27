@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { LogoutButton } from "@/components/login-form";
+import { LogoutButton, SetPasswordForm } from "@/components/login-form";
 import { currentCustomer } from "@/lib/auth";
 import { customerOrders, statusLabel } from "@/lib/orders";
 import { reviewableItems } from "@/lib/reviews";
@@ -69,6 +69,12 @@ async function Account() {
           ))}
         </ul>
       )}
+
+      <details className="panel pw-panel" open={!me.hasPassword}>
+        <summary><h2>{me.hasPassword ? "পাসওয়ার্ড বদলান" : "পাসওয়ার্ড সেট করুন"}</h2></summary>
+        {!me.hasPassword && <p className="hint">পাসওয়ার্ড সেট করলে পরের বার ইমেইলের কোড ছাড়াই লগইন করতে পারবেন।</p>}
+        <SetPasswordForm needCurrent={me.hasPassword} />
+      </details>
     </>
   );
 }

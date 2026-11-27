@@ -1,6 +1,7 @@
-// Role-based access control: the single source of truth for who may do what.
-// Pure data + pure functions, safe to import anywhere (also client components,
-// e.g. to hide a button). The SERVER always re-checks with lib/staff.ts.
+// Role-based access control. Pure data + pure functions, safe to import
+// anywhere. The owner edits which role may do what on Admin → স্টাফ ও ভূমিকা;
+// that table is stored in the database (lib/roles.ts) and the defaults below
+// are used until it is first saved. The SERVER always re-checks with lib/admin.ts.
 
 export const ROLES = ["owner", "manager", "order_staff", "content_editor"] as const;
 export type Role = (typeof ROLES)[number];
@@ -23,8 +24,16 @@ export const PERMISSIONS = [
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
-/** What each role may do. Owners can do everything. */
-const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
+export type RoleMatrix = Record<Role, readonly Permission[]>;
+
+/**
+ * Never given to anyone but the owner: managing staff includes editing this
+ * table, so granting it would let someone raise their own access.
+ */
+export const OWNER_ONLY: readonly Permission[] = ["staff.manage"];
+
+/** Starting table (used until the owner saves their own). Owners can do everything. */
+export const DEFAULT_ROLE_PERMISSIONS: RoleMatrix = {
   owner: PERMISSIONS,
   manager: [
     "dashboard.view",
@@ -44,6 +53,24 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   content_editor: ["dashboard.view", "products.view", "products.manage", "content.manage"],
 };
 
+/** Bangla names for the permission table. */
+export const permissionLabel: Record<Permission, string> = {
+  "dashboard.view": "ড্যাশবোর্ড",
+  "orders.view": "অর্ডার দেখা",
+  "orders.manage": "অর্ডার বদলানো",
+  "customers.view": "ক্রেতা দেখা",
+  "customers.manage": "ক্রেতা ব্লক/নোট",
+  "products.view": "পণ্য দেখা",
+  "products.manage": "পণ্য ও ক্যাটাগরি সম্পাদনা",
+  "reports.view": "লাভ-ক্ষতি",
+  "finance.manage": "খরচ ও কেনা দাম",
+  "content.manage": "পেজ ও ঘোষণা",
+  "marketing.manage": "কুপন ও রিভিউ",
+  "settings.manage": "সেটিংস",
+  "staff.manage": "স্টাফ পরিচালনা",
+  "audit.view": "অ্যাক্টিভিটি লগ",
+};
+
 export const roleLabel: Record<Role, string> = {
   owner: "মালিক",
   manager: "ম্যানেজার",
@@ -52,18 +79,36 @@ export const roleLabel: Record<Role, string> = {
 };
 
 export const roleDescription: Record<Role, string> = {
-  owner: "সব কিছু, স্টাফ ও সেটিংসসহ",
-  manager: "স্টাফ আর সেটিংস ছাড়া সব",
-  order_staff: "অর্ডার দেখা ও অবস্থা বদলানো, ক্রেতার তথ্য দেখা",
-  content_editor: "পণ্য, ক্যাটাগরি, পেজ ও ঘোষণা",
+  owner: "সব কিছু। স্টাফ ও ভূমিকা শুধু মালিকই বদলাতে পারেন।",
+  manager: "শুরুতে: স্টাফ আর সেটিংস ছাড়া সব",
+  order_staff: "শুরুতে: অর্ডার দেখা ও অবস্থা বদলানো, ক্রেতার তথ্য দেখা",
+  content_editor: "শুরুতে: পণ্য, ক্যাটাগরি, পেজ ও ঘোষণা",
 };
 
-export function can(role: Role | null | undefined, permission: Permission): boolean {
-  return role ? ROLE_PERMISSIONS[role].includes(permission) : false;
+export function isPermission(v: unknown): v is Permission {
+  return typeof v === "string" && (PERMISSIONS as readonly string[]).includes(v);
 }
 
-export function permissionsOf(role: Role | null | undefined): readonly Permission[] {
-  return role ? ROLE_PERMISSIONS[role] : [];
+/** Cleans a stored or submitted table: owner always has everything, unknown names and owner-only rights dropped. */
+export function normalizeMatrix(raw: unknown): RoleMatrix {
+  const src = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+  const out = {} as Record<Role, readonly Permission[]>;
+  for (const role of ROLES) {
+    if (role === "owner") { out.owner = PERMISSIONS; continue; }
+    const list = src && Array.isArray(src[role]) ? (src[role] as unknown[]) : DEFAULT_ROLE_PERMISSIONS[role];
+    out[role] = PERMISSIONS.filter((p) => list.includes(p) && !OWNER_ONLY.includes(p));
+  }
+  return out;
+}
+
+/** Permissions of a role under a given table. */
+export function permissionsOf(matrix: RoleMatrix, role: Role | null | undefined): readonly Permission[] {
+  return role ? matrix[role] : [];
+}
+
+/** Checks a staff member (from requirePermission / assertPermission, which carry their permissions). */
+export function can(staff: { permissions: readonly Permission[] } | null | undefined, permission: Permission): boolean {
+  return Boolean(staff?.permissions.includes(permission));
 }
 
 export function isRole(v: unknown): v is Role {

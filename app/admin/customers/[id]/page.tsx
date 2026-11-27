@@ -24,7 +24,7 @@ export default function CustomerPage({ params }: PageProps<"/admin/customers/[id
 async function Profile({ params }: { params: PageProps<"/admin/customers/[id]">["params"] }) {
   await connection();
   const me = await requirePermission("customers.view");
-  const canManage = can(me.role, "customers.manage");
+  const canManage = can(me, "customers.manage");
   const { id: raw } = await params;
   const id = Number(raw);
   if (!Number.isInteger(id) || id <= 0) notFound();

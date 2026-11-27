@@ -1,8 +1,11 @@
-// Email-code login and sessions. Server-only.
+// Login (email code the first time or when a password is forgotten; email +
+// password after that) and sessions. Server-only.
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { execute, selectOne } from "./db";
 import { sendLoginCode } from "./mailer";
+import { hashPassword, passwordProblem, verifyPassword } from "./password";
 import { isRole, type Role } from "./permissions";
 
 export const SESSION_COOKIE = "ms_session";
@@ -22,6 +25,8 @@ export type Customer = {
   role: Role | null;
   /** True for any staff role: may open /admin (each page checks its own permission). */
   isAdmin: boolean;
+  /** A password has been set (otherwise only email codes work). */
+  hasPassword: boolean;
   /** Two-factor login is turned on for this account. */
   totpEnabled: boolean;
   /** 2FA is on but this session hasn't entered an app code yet. */
@@ -121,11 +126,16 @@ export async function verifyLoginCode(email: string, code: string, userAgent: st
   );
   const customer = await customerByEmail(email);
   if (!customer) return { ok: false, status: 500, message: "অ্যাকাউন্ট খোলা যায়নি। আবার চেষ্টা করুন।" };
+  await startSession(customer.id, userAgent, "code");
+  return { ok: true, customer };
+}
 
+/** New session row + HttpOnly cookie. */
+async function startSession(customerId: number, userAgent: string, method: "code" | "password"): Promise<void> {
   const token = randomBytes(32).toString("base64url");
   await execute(
-    "INSERT INTO sessions (token_hash, customer_id, expires_at, user_agent) VALUES (?, ?, UTC_TIMESTAMP() + INTERVAL ? DAY, ?)",
-    [sha256(token), customer.id, SESSION_DAYS, userAgent.slice(0, 200)],
+    "INSERT INTO sessions (token_hash, customer_id, expires_at, user_agent, login_method) VALUES (?, ?, UTC_TIMESTAMP() + INTERVAL ? DAY, ?, ?)",
+    [sha256(token), customerId, SESSION_DAYS, userAgent.slice(0, 200), method],
   );
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -134,7 +144,71 @@ export async function verifyLoginCode(email: string, code: string, userAgent: st
     path: "/",
     maxAge: SESSION_DAYS * 24 * 60 * 60,
   });
+}
+
+// ---------- Password login ----------
+
+const PW_FAILS_PER_EMAIL = 5; // per 15 minutes
+const PW_FAILS_PER_IP = 20; // per 15 minutes
+
+/**
+ * Email + password. Same answer for "no account", "no password yet" and
+ * "wrong password", so it can't be used to find out who has an account.
+ */
+export async function loginWithPassword(email: string, password: string, ip: string, userAgent: string): Promise<VerifyResult> {
+  const fails = await selectOne<{ byEmail: number; byIp: number }>(
+    `SELECT
+       (SELECT COUNT(*) FROM login_failures WHERE email = ? AND created_at > UTC_TIMESTAMP() - INTERVAL 15 MINUTE) AS byEmail,
+       (SELECT COUNT(*) FROM login_failures WHERE ip = ? AND created_at > UTC_TIMESTAMP() - INTERVAL 15 MINUTE) AS byIp`,
+    [email, ip],
+  );
+  if (fails && (fails.byEmail >= PW_FAILS_PER_EMAIL || fails.byIp >= PW_FAILS_PER_IP)) {
+    return { ok: false, status: 429, message: "অনেকবার ভুল হয়েছে। ১৫ মিনিট পরে চেষ্টা করুন, অথবা ইমেইলে কোড নিয়ে লগইন করুন।" };
+  }
+  const row = await selectOne<{ id: number; password_hash: string | null; blocked_at: Date | null }>(
+    "SELECT id, password_hash, blocked_at FROM customers WHERE email = ?",
+    [email],
+  );
+  const ok = await verifyPassword(password, row?.password_hash ?? null);
+  if (!ok || !row) {
+    await execute("INSERT INTO login_failures (email, ip) VALUES (?, ?)", [email, ip]);
+    return { ok: false, status: 400, message: "ইমেইল বা পাসওয়ার্ড মেলেনি। পাসওয়ার্ড সেট না করে থাকলে বা ভুলে গেলে ইমেইলে কোড নিন।" };
+  }
+  if (row.blocked_at) return { ok: false, status: 403, message: "এই অ্যাকাউন্টে লগইন বন্ধ আছে। আমাদের ফোন করুন।" };
+  await execute("UPDATE customers SET last_login_at = UTC_TIMESTAMP() WHERE id = ?", [row.id]);
+  await execute("DELETE FROM login_failures WHERE email = ?", [email]);
+  const customer = await customerByEmail(email);
+  if (!customer) return { ok: false, status: 500, message: "লগইন করা যায়নি। আবার চেষ্টা করুন।" };
+  await startSession(customer.id, userAgent, "password");
   return { ok: true, customer };
+}
+
+export type PasswordResult = { ok: true } | { ok: false; status: number; message: string };
+
+/**
+ * Sets or changes the logged-in person's password. The current password is
+ * needed, except right after an email-code login (first time / forgot password).
+ * Other sessions are signed out; this one stays.
+ */
+export async function setOwnPassword(newPassword: string, currentPassword: string): Promise<PasswordResult> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) return { ok: false, status: 401, message: "আগে লগইন করুন।" };
+  const r = await selectOne<{ id: number; password_hash: string | null; fresh_code: number }>(
+    `SELECT c.id, c.password_hash,
+            (s.login_method = 'code' AND s.created_at > UTC_TIMESTAMP() - INTERVAL 30 MINUTE) AS fresh_code
+     FROM sessions s JOIN customers c ON c.id = s.customer_id
+     WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP() AND c.blocked_at IS NULL`,
+    [sha256(token)],
+  );
+  if (!r) return { ok: false, status: 401, message: "আগে লগইন করুন।" };
+  const problem = passwordProblem(newPassword);
+  if (problem) return { ok: false, status: 400, message: problem };
+  if (r.password_hash && !Number(r.fresh_code) && !(await verifyPassword(currentPassword, r.password_hash))) {
+    return { ok: false, status: 400, message: "বর্তমান পাসওয়ার্ড মেলেনি। ভুলে গেলে লগআউট করে ইমেইলে কোড নিয়ে লগইন করুন।" };
+  }
+  await execute("UPDATE customers SET password_hash = ?, password_set_at = UTC_TIMESTAMP() WHERE id = ?", [await hashPassword(newPassword), r.id]);
+  await execute("DELETE FROM sessions WHERE customer_id = ? AND token_hash <> ?", [r.id, sha256(token)]);
+  return { ok: true };
 }
 
 type CustomerRow = {
@@ -146,6 +220,7 @@ type CustomerRow = {
   address_parts: unknown;
   role: string | null;
   blocked_at: Date | null;
+  has_password?: number;
   totp_enabled_at?: Date | null;
   mfa_at?: Date | null;
 };
@@ -163,24 +238,32 @@ function toCustomer(r: CustomerRow): Customer {
   const totpEnabled = Boolean(r.totp_enabled_at);
   return {
     id: r.id, email: r.email, name: r.name, phone: r.phone, address: r.address, addressParts, role, isAdmin: role !== null,
-    totpEnabled, mfaPending: totpEnabled && !r.mfa_at,
+    hasPassword: Boolean(Number(r.has_password ?? 0)), totpEnabled, mfaPending: totpEnabled && !r.mfa_at,
   };
 }
 
 async function customerByEmail(email: string): Promise<Customer | null> {
-  const r = await selectOne<CustomerRow>("SELECT id, email, name, phone, address, address_parts, role, blocked_at FROM customers WHERE email = ?", [email]);
+  const r = await selectOne<CustomerRow>("SELECT id, email, name, phone, address, address_parts, role, blocked_at, password_hash IS NOT NULL AS has_password FROM customers WHERE email = ?", [email]);
   return r ? toCustomer(r) : null;
 }
 
-/** The logged-in customer, or null. Reads the session cookie (request time). */
-export async function currentCustomer(): Promise<Customer | null> {
+/**
+ * The logged-in customer, or null. Reads the session cookie (request time).
+ * Wrapped in React cache(): the menu, the page and the gate all ask for it, but
+ * the database is queried once per request.
+ */
+export const currentCustomer = cache(async (): Promise<Customer | null> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
+  return customerBySession(sha256(token));
+});
+
+async function customerBySession(tokenHash: string): Promise<Customer | null> {
   const r = await selectOne<CustomerRow>(
-    `SELECT c.id, c.email, c.name, c.phone, c.address, c.address_parts, c.role, c.blocked_at, c.totp_enabled_at, s.mfa_at
+    `SELECT c.id, c.email, c.name, c.phone, c.address, c.address_parts, c.role, c.blocked_at, c.password_hash IS NOT NULL AS has_password, c.totp_enabled_at, s.mfa_at
      FROM sessions s JOIN customers c ON c.id = s.customer_id
      WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP()`,
-    [sha256(token)],
+    [tokenHash],
   );
   // A blocked account behaves as logged out everywhere.
   return r && !r.blocked_at ? toCustomer(r) : null;
@@ -203,6 +286,7 @@ export async function logout(): Promise<void> {
 export async function pruneAuthTables(): Promise<void> {
   await execute("DELETE FROM login_codes WHERE created_at < UTC_TIMESTAMP() - INTERVAL 2 DAY");
   await execute("DELETE FROM sessions WHERE expires_at < UTC_TIMESTAMP()");
+  await execute("DELETE FROM login_failures WHERE created_at < UTC_TIMESTAMP() - INTERVAL 1 DAY");
 }
 
 export function clientIp(request: Request): string {
