@@ -12,9 +12,11 @@ const globalForDb = globalThis as unknown as { musufiPool?: Pool };
 
 function pool(): Pool {
   if (globalForDb.musufiPool) return globalForDb.musufiPool;
+  // DB_SOCKET (optional): connect through MySQL's local socket file instead of TCP,
+  // e.g. /var/lib/mysql/mysql.sock, when the host only accepts socket connections.
+  const socketPath = env("DB_SOCKET");
   const p = mysql.createPool({
-    host: env("DB_HOST"),
-    port: Number(env("DB_PORT")) || 3306,
+    ...(socketPath ? { socketPath } : { host: env("DB_HOST"), port: Number(env("DB_PORT")) || 3306 }),
     user: env("DB_USER"),
     password: env("DB_PASSWORD"),
     database: env("DB_NAME"),
@@ -33,6 +35,15 @@ function pool(): Pool {
 }
 
 export type Row = RowDataPacket;
+
+/**
+ * Short, safe reason for a database failure, e.g. "ECONNREFUSED" or "ER_ACCESS_DENIED_ERROR".
+ * Only the error code: never the message, host, user or password.
+ */
+export function dbErrorReason(e: unknown): string {
+  const code = (e as { code?: unknown })?.code;
+  return typeof code === "string" && /^[A-Z_0-9]{3,40}$/.test(code) ? code : "UNKNOWN";
+}
 
 export async function select<T>(sql: string, params: unknown[] = []): Promise<T[]> {
   const [rows] = await pool().query<RowDataPacket[]>(sql, params);

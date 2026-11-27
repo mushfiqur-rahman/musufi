@@ -36,7 +36,7 @@ export function isAdminEmail(email: string): boolean {
 
 function secret(): string {
   const s = process.env.SESSION_SECRET ?? "";
-  if (s.length < 32) throw new Error("SESSION_SECRET is missing or too short");
+  if (s.length < 32) throw Object.assign(new Error("SESSION_SECRET is missing or too short"), { code: "CONFIG_SESSION_SECRET" });
   return s;
 }
 

@@ -3,6 +3,7 @@ import { clientIp, currentCustomer } from "@/lib/auth";
 import { dbConfigured } from "@/lib/db";
 import { mailConfigured, sendOrderAlert, sendOrderConfirmation, smtpReady } from "@/lib/mailer";
 import { createOrder } from "@/lib/orders";
+import { serverTrouble } from "@/lib/api";
 import { site, type DeliveryZone } from "@/lib/site";
 
 const BD_MOBILE = /^01[3-9]\d{8}$/;
@@ -70,7 +71,12 @@ export async function POST(request: Request) {
   }
 
   // An account is required to order. The form logs the customer in by email code first.
-  const customer = await currentCustomer();
+  let customer;
+  try {
+    customer = await currentCustomer();
+  } catch (e) {
+    return serverTrouble("order-session", e);
+  }
   if (!customer) {
     return Response.json({ needLogin: true, message: "অর্ডার করতে ইমেইল দিয়ে লগইন করুন।" }, { status: 401 });
   }
@@ -99,8 +105,7 @@ export async function POST(request: Request) {
       address: o.address,
     });
   } catch (err) {
-    console.error("[order] could not save order:", err instanceof Error ? err.message : err);
-    return Response.json({ message: `অর্ডার সংরক্ষণ করা যায়নি। ${FALLBACK}` }, { status: 500 });
+    return serverTrouble("order-save", err);
   }
 
   // The order is saved, so email problems are logged but do not fail the order.
