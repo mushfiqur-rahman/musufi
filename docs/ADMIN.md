@@ -24,7 +24,7 @@ Read it before adding a page, a permission or a database change.
 | Staff 2FA | `lib/totp.ts` (RFC 6238 + AES-GCM), `lib/mfa.ts` | Authenticator-app codes for staff logins. |
 | Server actions | `app/admin/actions/*.ts` (products, operations, settings, marketing, security) | Every admin write goes through here. |
 | Admin pages | `app/admin/**` | Each page checks its own permission. |
-| Database | `db/migrations/*.sql`, `npm run db:migrate` | Schema changes, applied in name order, once each. |
+| Database | `db/migrations/*.sql`, `lib/db-setup.ts`, `instrumentation.ts` | Schema changes, applied in name order, once each, **automatically when the server starts** (also `npm run db:migrate`). An empty shop gets the starter catalogue. |
 | Starter catalogue | `lib/products.ts`, `npm run db:seed` | Types + the first products; also the fallback if the DB is down. |
 
 ## Roles
