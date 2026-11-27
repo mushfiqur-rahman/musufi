@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProductImage } from "@/lib/products";
 import { bn } from "@/lib/site";
@@ -9,7 +8,9 @@ import { ProductPhoto } from "./product-photo";
 
 function Slide({ img, sizes, priority }: { img: ProductImage; sizes: string; priority?: boolean }) {
   if (img.src) {
-    return <Image src={img.src} alt={img.alt} fill sizes={sizes} priority={priority} style={{ objectFit: "cover" }} />;
+    // Plain img: photos are resized at upload, and server-side optimisation would need a native binary.
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={img.src} alt={img.alt} sizes={sizes} loading={priority ? "eager" : "lazy"} decoding="async" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />;
   }
   return <ProductPhoto label={img.alt} art={img.art} closeUp={img.closeUp} note={`${img.caption}-এর ছবি আসছে`} />;
 }

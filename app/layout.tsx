@@ -4,6 +4,7 @@ import { JsonLd } from "@/components/json-ld";
 import { WhatsAppIcon } from "@/components/icons";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { getCatalog } from "@/lib/catalog";
 import { site, whatsappLink } from "@/lib/site";
 import "./globals.css";
 
@@ -63,12 +64,13 @@ const orgJsonLd = {
   currenciesAccepted: "BDT",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const { categories } = await getCatalog();
   return (
     <html lang="bn" data-scroll-behavior="smooth" className={`${poppins.variable} ${hind.variable}`}>
       <body>
         <a className="skip" href="#main">মূল অংশে যান</a>
-        <SiteHeader />
+        <SiteHeader categories={categories.map((c) => ({ id: c.id, label: c.label }))} />
         <main id="main">{children}</main>
         <SiteFooter />
         <a className="fab" href={whatsappLink("আসসালামু আলাইকুম, আমি অর্ডার করতে চাই।")} target="_blank" rel="noopener" aria-label="হোয়াটসঅ্যাপে প্রশ্ন করুন">

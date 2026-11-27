@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { requireAdmin } from "@/lib/admin";
+import { requirePermission } from "@/lib/admin";
 import { buildReport } from "@/lib/reports";
 import { bn, taka } from "@/lib/site";
 import { addDays, dhakaToday, monthStart, weekStart } from "@/lib/time";
@@ -26,7 +26,7 @@ export default function ReportsPage({ searchParams }: PageProps<"/admin/reports"
 
 async function Reports({ searchParams }: { searchParams: PageProps<"/admin/reports">["searchParams"] }) {
   await connection(); // database work happens only for a real request, never while prerendering
-  await requireAdmin();
+  await requirePermission("reports.view");
   const sp = await searchParams;
   const today = dhakaToday();
   const period: Period = typeof sp.p === "string" && sp.p in PERIODS ? (sp.p as Period) : "month";

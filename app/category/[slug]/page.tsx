@@ -5,18 +5,18 @@ import { Suspense } from "react";
 import { Faq, faqJsonLd } from "@/components/faq";
 import { JsonLd } from "@/components/json-ld";
 import { ProductCard } from "@/components/product-shelf";
-import { categories, productsIn, toCard, type CategoryId } from "@/lib/products";
+import { findCategory, getCatalog, productsInCategory } from "@/lib/catalog";
+import { toCard } from "@/lib/products";
 import { bn, site } from "@/lib/site";
 
-const find = (slug: string) => categories.find((c) => c.id === (slug as CategoryId));
-
-export function generateStaticParams() {
+export async function generateStaticParams() {
+  const { categories } = await getCatalog();
   return categories.map((c) => ({ slug: c.id }));
 }
 
 export async function generateMetadata({ params }: PageProps<"/category/[slug]">): Promise<Metadata> {
   const { slug } = await params;
-  const c = find(slug);
+  const c = findCategory(await getCatalog(), slug);
   if (!c) return {};
   return {
     title: c.label,
@@ -36,9 +36,11 @@ export default function CategoryPage({ params }: PageProps<"/category/[slug]">) 
 
 async function CategoryView({ params }: { params: PageProps<"/category/[slug]">["params"] }) {
   const { slug } = await params;
-  const c = find(slug);
+  const catalog = await getCatalog();
+  const c = findCategory(catalog, slug);
   if (!c) notFound();
-  const items = productsIn(c.id);
+  const { categories } = catalog;
+  const items = productsInCategory(catalog, c.id);
   const url = `${site.url}/category/${c.id}`;
 
   const listLd = {

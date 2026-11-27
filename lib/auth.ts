@@ -3,6 +3,7 @@ import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 
 import { cookies } from "next/headers";
 import { execute, selectOne } from "./db";
 import { sendLoginCode } from "./mailer";
+import { isRole, type Role } from "./permissions";
 
 export const SESSION_COOKIE = "ms_session";
 const SESSION_DAYS = 30;
@@ -15,6 +16,9 @@ export type Customer = {
   name: string | null;
   phone: string | null;
   address: string | null;
+  /** Staff role, or null for an ordinary customer. Owners from ADMIN_EMAILS are always "owner". */
+  role: Role | null;
+  /** True for any staff role: may open /admin (each page checks its own permission). */
   isAdmin: boolean;
 };
 
@@ -59,6 +63,8 @@ export async function requestLoginCode(email: string, ip: string): Promise<CodeR
 
   // A new code cancels any older unused ones, so only the latest email works.
   await execute("UPDATE login_codes SET used_at = UTC_TIMESTAMP() WHERE email = ? AND used_at IS NULL", [email]);
+  const blocked = await selectOne<{ id: number }>("SELECT id FROM customers WHERE email = ? AND blocked_at IS NOT NULL", [email]);
+  if (blocked) return { ok: false, status: 403, message: "এই অ্যাকাউন্টে লগইন বন্ধ আছে। আমাদের ফোন করুন।" };
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   await execute(
     "INSERT INTO login_codes (email, code_hash, ip, expires_at) VALUES (?, ?, ?, UTC_TIMESTAMP() + INTERVAL ? MINUTE)",
@@ -125,11 +131,30 @@ export async function verifyLoginCode(email: string, code: string, userAgent: st
   return { ok: true, customer };
 }
 
-type CustomerRow = { id: number; email: string; name: string | null; phone: string | null; address: string | null };
+type CustomerRow = {
+  id: number;
+  email: string;
+  name: string | null;
+  phone: string | null;
+  address: string | null;
+  role: string | null;
+  blocked_at: Date | null;
+};
+
+/** Effective role: ADMIN_EMAILS always wins (so the owner can never lock themselves out). */
+export function effectiveRole(email: string, dbRole: string | null): Role | null {
+  if (isAdminEmail(email)) return "owner";
+  return isRole(dbRole) ? dbRole : null;
+}
+
+function toCustomer(r: CustomerRow): Customer {
+  const role = effectiveRole(r.email, r.role);
+  return { id: r.id, email: r.email, name: r.name, phone: r.phone, address: r.address, role, isAdmin: role !== null };
+}
 
 async function customerByEmail(email: string): Promise<Customer | null> {
-  const r = await selectOne<CustomerRow>("SELECT id, email, name, phone, address FROM customers WHERE email = ?", [email]);
-  return r ? { ...r, isAdmin: isAdminEmail(r.email) } : null;
+  const r = await selectOne<CustomerRow>("SELECT id, email, name, phone, address, role, blocked_at FROM customers WHERE email = ?", [email]);
+  return r ? toCustomer(r) : null;
 }
 
 /** The logged-in customer, or null. Reads the session cookie (request time). */
@@ -137,12 +162,13 @@ export async function currentCustomer(): Promise<Customer | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const r = await selectOne<CustomerRow>(
-    `SELECT c.id, c.email, c.name, c.phone, c.address
+    `SELECT c.id, c.email, c.name, c.phone, c.address, c.role, c.blocked_at
      FROM sessions s JOIN customers c ON c.id = s.customer_id
      WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP()`,
     [sha256(token)],
   );
-  return r ? { ...r, isAdmin: isAdminEmail(r.email) } : null;
+  // A blocked account behaves as logged out everywhere.
+  return r && !r.blocked_at ? toCustomer(r) : null;
 }
 
 export async function logout(): Promise<void> {

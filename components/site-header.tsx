@@ -2,19 +2,20 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { categories } from "@/lib/products";
 import { phoneDisplay, site } from "@/lib/site";
 import { CloseIcon, LogoMark, MenuIcon, PhoneIcon, UserIcon } from "./icons";
 
-const links = categories.map((c) => ({ href: `/category/${c.id}`, label: c.label }));
+export type NavCategory = { id: string; label: string };
+
 const extra = [
   { href: "/account", label: "আমার অর্ডার" },
   { href: "/#delivery", label: "ডেলিভারি ও পেমেন্ট" },
   { href: "/#faq", label: "প্রশ্ন ও উত্তর" },
 ];
 
-export function SiteHeader() {
+export function SiteHeader({ categories }: { categories: NavCategory[] }) {
   const [open, setOpen] = useState(false);
+  const links = categories.map((c) => ({ href: `/category/${c.id}`, label: c.label }));
   return (
     <header className="site-header">
       <div className="wrap bar">

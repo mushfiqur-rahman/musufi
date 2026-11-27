@@ -1,7 +1,7 @@
 // Orders, delivery-history risk, costs and settings. Server-only.
 import { execute, select, selectOne, transaction } from "./db";
 import { newOrderNo } from "./mailer";
-import type { Product } from "./products";
+import type { Orderable } from "./catalog";
 import type { DeliveryZone } from "./site";
 
 export const STATUSES = ["new", "confirmed", "shipped", "delivered", "returned", "cancelled"] as const;
@@ -18,7 +18,8 @@ export const statusLabel: Record<OrderStatus, string> = {
 
 export type NewOrder = {
   customerId: number;
-  product: Product;
+  /** Fresh from the database (lib/catalog.ts loadOrderable), never from the cache. */
+  product: Orderable;
   variantIndex: number;
   qty: number;
   zone: DeliveryZone;
@@ -28,37 +29,44 @@ export type NewOrder = {
   address: string;
 };
 
-export async function unitCost(slug: string, variantIndex: number): Promise<number | null> {
-  const r = await selectOne<{ unit_cost: number }>(
-    "SELECT unit_cost FROM product_costs WHERE product_slug = ? AND variant_index = ?",
-    [slug, variantIndex],
-  );
-  return r ? r.unit_cost : null;
+/** Thrown when a tracked variant doesn't have enough stock left. */
+export class OutOfStockError extends Error {
+  readonly code = "OUT_OF_STOCK";
 }
 
-/** Saves the order and its item in one transaction. Returns the order number. */
+/**
+ * Saves the order in one transaction: order row, item (with price and cost
+ * snapshot), first history event, stock decrement, remembered contact details.
+ * Stock is decremented with a guarded UPDATE, so two customers can never both
+ * buy the last unit.
+ */
 export async function createOrder(o: NewOrder): Promise<{ orderNo: string; subtotal: number; total: number }> {
   const v = o.product.variants[o.variantIndex];
   const subtotal = v.price * o.qty;
   const total = subtotal + o.deliveryFee;
-  const cost = await unitCost(o.product.slug, o.variantIndex);
+  const cost = v.cost;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const orderNo = newOrderNo();
     try {
       await transaction(async (conn) => {
+        const [stock] = await conn.query<import("mysql2").ResultSetHeader>(
+          "UPDATE product_variants SET stock = stock - ? WHERE id = ? AND stock IS NOT NULL AND stock >= ?",
+          [o.qty, v.id, o.qty],
+        );
+        if (v.stock !== null && stock.affectedRows !== 1) throw new OutOfStockError(`Not enough stock for variant ${v.id}`);
+
         const [res] = await conn.query<import("mysql2").ResultSetHeader>(
           `INSERT INTO orders (order_no, customer_id, name, phone, address, zone, subtotal, delivery_fee, total, cost_total)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [orderNo, o.customerId, o.name, o.phone, o.address, o.zone, subtotal, o.deliveryFee, total, cost === null ? null : cost * o.qty],
         );
         await conn.query(
-          `INSERT INTO order_items (order_id, product_slug, product_name, variant_index, variant_label, unit_price, unit_cost, qty)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [res.insertId, o.product.slug, o.product.name, o.variantIndex, v.label, v.price, cost, o.qty],
+          `INSERT INTO order_items (order_id, product_slug, product_name, variant_index, variant_id, variant_label, unit_price, unit_cost, qty)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [res.insertId, o.product.slug, o.product.name, o.variantIndex, v.id, v.label, v.price, cost, o.qty],
         );
         await conn.query("INSERT INTO order_events (order_id, status, note) VALUES (?, 'new', 'ওয়েবসাইট থেকে অর্ডার')", [res.insertId]);
-        // Remember contact details for the next order.
         await conn.query("UPDATE customers SET name = ?, phone = ?, address = ? WHERE id = ?", [o.name, o.phone, o.address, o.customerId]);
       });
       return { orderNo, subtotal, total };
@@ -167,11 +175,24 @@ const STAMP: Partial<Record<OrderStatus, string>> = {
   cancelled: "cancelled_at",
 };
 
+/**
+ * Changes an order's status and logs it. Cancelling an order that hasn't been
+ * shipped yet puts its tracked stock back.
+ */
 export async function setStatus(orderNo: string, status: OrderStatus, note: string | null, byEmail: string): Promise<boolean> {
-  const order = await selectOne<{ id: number }>("SELECT id FROM orders WHERE order_no = ?", [orderNo]);
+  const order = await selectOne<{ id: number; status: OrderStatus }>("SELECT id, status FROM orders WHERE order_no = ?", [orderNo]);
   if (!order) return false;
+  if (order.status === status) return true;
   const stamp = STAMP[status];
+  const restock = status === "cancelled" && (order.status === "new" || order.status === "confirmed");
   await transaction(async (conn) => {
+    if (restock) {
+      await conn.query(
+        `UPDATE product_variants v JOIN order_items i ON i.variant_id = v.id
+         SET v.stock = v.stock + i.qty WHERE i.order_id = ? AND v.stock IS NOT NULL`,
+        [order.id],
+      );
+    }
     await conn.query(
       `UPDATE orders SET status = ?${stamp ? `, ${stamp} = COALESCE(${stamp}, UTC_TIMESTAMP())` : ""} WHERE id = ?`,
       [status, order.id],
@@ -186,24 +207,6 @@ export async function setNote(orderNo: string, note: string): Promise<void> {
 }
 
 // ---------- Costs, settings, expenses ----------
-
-export async function allCosts(): Promise<Map<string, number>> {
-  const rows = await select<{ product_slug: string; variant_index: number; unit_cost: number }>(
-    "SELECT product_slug, variant_index, unit_cost FROM product_costs",
-  );
-  return new Map(rows.map((r) => [`${r.product_slug}:${r.variant_index}`, r.unit_cost]));
-}
-
-export async function saveCost(slug: string, variantIndex: number, unitCost: number | null): Promise<void> {
-  if (unitCost === null) {
-    await execute("DELETE FROM product_costs WHERE product_slug = ? AND variant_index = ?", [slug, variantIndex]);
-  } else {
-    await execute(
-      "INSERT INTO product_costs (product_slug, variant_index, unit_cost) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE unit_cost = VALUES(unit_cost)",
-      [slug, variantIndex, unitCost],
-    );
-  }
-}
 
 export const SETTING_KEYS = ["courier_cost_dhaka", "courier_cost_outside", "packing_cost"] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];

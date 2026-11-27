@@ -5,6 +5,9 @@
 const nextConfig = {
   experimental: {
     agentFeedback: false,
+    // Product photos are uploaded through a Server Action; they are resized in the
+    // browser first (max ~1.5 MB), so 2 MB leaves headroom without inviting abuse.
+    serverActions: { bodySizeLimit: "2mb" },
   },
   cacheComponents: true,
   partialPrefetching: true,

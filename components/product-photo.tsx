@@ -2,7 +2,16 @@ import type { Art } from "@/lib/products";
 
 // Product image slot. Until real photos exist it shows a flat illustration
 // for the product type. Later: swap for <Image src=... alt=... /> from next/image.
-export function ProductPhoto({ label, art, className, closeUp, note }: { label: string; art?: Art; className?: string; closeUp?: boolean; note?: string }) {
+export function ProductPhoto({ label, art, src, className, closeUp, note }: { label: string; art?: Art; src?: string; className?: string; closeUp?: boolean; note?: string }) {
+  if (src) {
+    return (
+      <div className={`photo-slot photo${className ? ` ${className}` : ""}`}>
+        {/* Already resized at upload; plain img avoids server-side image processing (no native deps). */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={label} loading="lazy" decoding="async" />
+      </div>
+    );
+  }
   if (!art) {
     return (
       <div className={`photo-slot${className ? ` ${className}` : ""}`} role="img" aria-label={label}>

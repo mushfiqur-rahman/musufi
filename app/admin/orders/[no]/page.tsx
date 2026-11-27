@@ -2,8 +2,8 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { updateOrderNote, updateOrderStatus } from "@/app/admin/actions";
-import { requireAdmin } from "@/lib/admin";
+import { updateOrderNote, updateOrderStatus } from "@/app/admin/actions/operations";
+import { requirePermission } from "@/lib/admin";
 import { getOrder, orderEvents, phoneRisk, statusLabel, STATUSES } from "@/lib/orders";
 import { bn, taka } from "@/lib/site";
 import { dhakaDateTime } from "@/lib/time";
@@ -18,7 +18,7 @@ export default function AdminOrderPage({ params }: PageProps<"/admin/orders/[no]
 
 async function OrderDetail({ params }: { params: PageProps<"/admin/orders/[no]">["params"] }) {
   await connection(); // database work happens only for a real request, never while prerendering
-  await requireAdmin();
+  await requirePermission("orders.view");
   const { no } = await params;
   const o = await getOrder(decodeURIComponent(no));
   if (!o) notFound();
@@ -27,7 +27,7 @@ async function OrderDetail({ params }: { params: PageProps<"/admin/orders/[no]">
 
   return (
     <>
-      <p className="crumbs"><Link href="/admin">← সব অর্ডার</Link></p>
+      <p className="crumbs"><Link href="/admin/orders">← সব অর্ডার</Link></p>
       <div className="admin-head">
         <h1 className="num">{o.order_no}</h1>
         <p className="lead">{dhakaDateTime(o.created_at)} · <span className={`pill st-${o.status}`}>{statusLabel[o.status]}</span></p>

@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { createExpense, removeExpense } from "@/app/admin/actions";
-import { requireAdmin } from "@/lib/admin";
+import { createExpense, removeExpense } from "@/app/admin/actions/operations";
+import { requirePermission } from "@/lib/admin";
 import { listExpenses } from "@/lib/orders";
 import { taka } from "@/lib/site";
 import { addDays, dhakaToday } from "@/lib/time";
@@ -20,7 +20,7 @@ export default function ExpensesPage() {
 
 async function Expenses() {
   await connection(); // database work happens only for a real request, never while prerendering
-  await requireAdmin();
+  await requirePermission("finance.manage");
   const today = dhakaToday();
   const list = await listExpenses(addDays(today, -60), today);
   const sum = list.reduce((a, e) => a + e.amount, 0);

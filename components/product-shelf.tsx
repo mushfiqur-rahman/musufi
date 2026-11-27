@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { categories, type CardProduct, type CategoryId } from "@/lib/products";
+import type { CardProduct, CategoryId } from "@/lib/products";
 import { taka } from "@/lib/site";
 import { ProductPhoto } from "./product-photo";
 
@@ -15,7 +15,7 @@ export function ProductCard({ p, headingLevel = 3 }: { p: CardProduct; headingLe
     <article className="card">
       <Link className="media" href={href} tabIndex={-1} aria-hidden="true">
         {p.badge && <span className={`tag${p.badge === "ঘরে তৈরি" ? " green" : ""}`}>{p.badge}</span>}
-        <ProductPhoto label="" art={p.art} />
+        <ProductPhoto label="" art={p.art} src={p.image} />
       </Link>
       <div className="body">
         <H><Link href={href}>{p.name}</Link></H>
@@ -42,10 +42,10 @@ export function ProductCard({ p, headingLevel = 3 }: { p: CardProduct; headingLe
   );
 }
 
-export function ProductShelf({ items }: { items: CardProduct[] }) {
+export function ProductShelf({ items, categories }: { items: CardProduct[]; categories: { id: string; label: string }[] }) {
   const [cat, setCat] = useState<CategoryId | "all">("all");
   const shown = cat === "all" ? items : items.filter((p) => p.category === cat);
-  const chips: { id: CategoryId | "all"; label: string }[] = [{ id: "all", label: "সব" }, ...categories.map((c) => ({ id: c.id, label: c.label }))];
+  const chips: { id: CategoryId | "all"; label: string }[] = [{ id: "all", label: "সব" }, ...categories];
   return (
     <>
       <div className="chips" role="group" aria-label="ধরন অনুযায়ী দেখুন">

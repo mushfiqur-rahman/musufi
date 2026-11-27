@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { categories } from "@/lib/products";
+import { getCatalog } from "@/lib/catalog";
 import { bn, phoneDisplay, site, whatsappLink } from "@/lib/site";
 import { LogoMark, WhatsAppIcon } from "./icons";
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const { categories } = await getCatalog();
   return (
     <footer className="site-footer">
       <div className="wrap cols">

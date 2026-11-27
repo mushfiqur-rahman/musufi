@@ -1,8 +1,8 @@
-import { getCategory, getProduct } from "@/lib/products";
+import { loadOrderable, type Orderable } from "@/lib/catalog";
 import { clientIp, currentCustomer } from "@/lib/auth";
 import { dbConfigured } from "@/lib/db";
 import { mailConfigured, sendOrderAlert, sendOrderConfirmation, smtpReady } from "@/lib/mailer";
-import { createOrder } from "@/lib/orders";
+import { createOrder, OutOfStockError } from "@/lib/orders";
 import { serverTrouble } from "@/lib/api";
 import { site, type DeliveryZone } from "@/lib/site";
 
@@ -18,24 +18,34 @@ type OrderInput = {
   address: string;
 };
 
+/** Checks the request's shape. Product, size, stock and zone are checked later against the database. */
 function validate(body: unknown): { ok: true; order: OrderInput } | { ok: false; message: string } {
   if (!body || typeof body !== "object") return { ok: false, message: "অর্ডারের তথ্য পাওয়া যায়নি।" };
   const b = body as Record<string, unknown>;
-  const product = typeof b.slug === "string" ? getProduct(b.slug) : undefined;
-  if (!product) return { ok: false, message: "পণ্যটি খুঁজে পাওয়া যায়নি।" };
+  const slug = typeof b.slug === "string" ? b.slug.trim() : "";
+  if (!/^[a-z0-9-]{1,80}$/.test(slug)) return { ok: false, message: "পণ্যটি খুঁজে পাওয়া যায়নি।" };
   const variant = Number(b.variant);
-  if (!Number.isInteger(variant) || !product.variants[variant]) return { ok: false, message: "পরিমাণটি সঠিক নয়।" };
+  if (!Number.isInteger(variant) || variant < 0 || variant > 50) return { ok: false, message: "পরিমাণটি সঠিক নয়।" };
   const qty = Number(b.qty);
   if (!Number.isInteger(qty) || qty < 1 || qty > 20) return { ok: false, message: "সংখ্যা ১ থেকে ২০-এর মধ্যে দিন।" };
   if (b.zone !== "dhaka" && b.zone !== "outside") return { ok: false, message: "ডেলিভারি এলাকা বেছে নিন।" };
-  if (!getCategory(product.category).zones.includes(b.zone)) return { ok: false, message: "এই পণ্য এখন শুধু ঢাকার ভেতরে ডেলিভারি হয়।" };
   const name = typeof b.name === "string" ? b.name.trim() : "";
   const phone = typeof b.phone === "string" ? b.phone.trim() : "";
   const address = typeof b.address === "string" ? b.address.trim() : "";
   if (name.length < 2 || name.length > 80) return { ok: false, message: "আপনার নাম দিন।" };
   if (!BD_MOBILE.test(phone)) return { ok: false, message: "১১ সংখ্যার মোবাইল নম্বর দিন।" };
   if (address.length < 10 || address.length > 300) return { ok: false, message: "পুরো ঠিকানা দিন।" };
-  return { ok: true, order: { slug: product.slug, variant, qty, zone: b.zone, name, phone, address } };
+  return { ok: true, order: { slug, variant, qty, zone: b.zone, name, phone, address } };
+}
+
+/** Product rules against the live database row. */
+function checkProduct(product: Orderable | null, o: OrderInput): string | null {
+  if (!product) return "পণ্যটি এখন পাওয়া যাচ্ছে না।";
+  const v = product.variants[o.variant];
+  if (!v) return "পরিমাণটি সঠিক নয়। পেজটি রিফ্রেশ করে আবার চেষ্টা করুন।";
+  if (v.stock !== null && v.stock < o.qty) return v.stock > 0 ? `এই সাইজের মাত্র ${v.stock}টি আছে।` : "এই সাইজ এখন স্টকে নেই।";
+  if (!product.zones.includes(o.zone)) return "এই পণ্য এখন শুধু ঢাকার ভেতরে ডেলিভারি হয়।";
+  return null;
 }
 
 // Simple spam guard: at most 5 orders per 10 minutes from one IP address.
@@ -85,9 +95,16 @@ export async function POST(request: Request) {
     return Response.json({ message: `অল্প সময়ে অনেক অর্ডার এসেছে। একটু পরে চেষ্টা করুন, অথবা ${FALLBACK}` }, { status: 429 });
   }
 
-  // Prices are always recalculated on the server, never trusted from the browser.
+  // Prices, stock and zones come fresh from the database, never from the browser.
   const o = result.order;
-  const product = getProduct(o.slug)!;
+  let product: Orderable | null;
+  try {
+    product = await loadOrderable(o.slug);
+  } catch (e) {
+    return serverTrouble("order-product", e);
+  }
+  const problem = checkProduct(product, o);
+  if (problem || !product) return Response.json({ message: problem }, { status: 409 });
   const v = product.variants[o.variant];
   const zone = site.delivery[o.zone];
 
@@ -105,6 +122,9 @@ export async function POST(request: Request) {
       address: o.address,
     });
   } catch (err) {
+    if (err instanceof OutOfStockError) {
+      return Response.json({ message: "দুঃখিত, এইমাত্র এই সাইজের স্টক শেষ হয়ে গেছে।" }, { status: 409 });
+    }
     return serverTrouble("order-save", err);
   }
 

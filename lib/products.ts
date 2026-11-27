@@ -1,8 +1,10 @@
-// Catalogue. Names, prices and sources are placeholders until the owner
-// supplies real data. Later this moves to MySQL.
+// Catalogue TYPES, plus the STARTER catalogue used to seed the database
+// (npm run db:seed) and as a fallback if the database is unreachable.
+// The live shop reads products from the database via lib/catalog.ts.
 import type { DeliveryZone } from "./site";
 
-export type CategoryId = "fish" | "spices" | "honey-oil" | "homemade";
+/** Category slug, e.g. "fish". Free text since categories are managed in the admin. */
+export type CategoryId = string;
 
 export type CategoryInfo = {
   id: CategoryId;
@@ -18,11 +20,14 @@ export type CategoryInfo = {
   /** Short policy line shown on product pages in this category. */
   policy: string;
   faq: { q: string; a: string }[];
+  /** Illustration for the category tile until a photo exists. */
+  art?: Art;
 };
 
 export const categories: CategoryInfo[] = [
   {
     id: "fish",
+    art: "fish",
     label: "লোনা পানির মাছ",
     blurb: "ভেটকি, পার্সে, বাগদা-গলদা চিংড়ি",
     intro: "মুসুফির মাছ আসে খুলনা, সাতক্ষীরা আর বাগেরহাটের লোনা পানির ঘের ও নদী থেকে: ভেটকি, পার্সে, পাতাড়ি, সালুট, বাগদা আর গলদা চিংড়ি। জেলে ও ঘের মালিকের কাছ থেকে সরাসরি এনে বরফে প্যাক করে পাঠানো হয়। তাজা মাছ এখন শুধু ঢাকার ভেতরে ডেলিভারি হয়।",
@@ -37,6 +42,7 @@ export const categories: CategoryInfo[] = [
   },
   {
     id: "spices",
+    art: "stem",
     label: "চুইঝাল ও মসলা",
     blurb: "খুলনার চুইঝাল, ঘরে গুঁড়া মসলা",
     intro: "চুইঝাল খুলনা-যশোর অঞ্চলের একটি লতার কাণ্ড, যা মাংস ও মাছে ঝাল আর ঝাঁঝালো ঘ্রাণ দেয়। মুসুফি সরাসরি চাষির কাছ থেকে তাজা চুইঝাল আর ঘরে গুঁড়া করা মসলা পাঠায়।",
@@ -47,6 +53,7 @@ export const categories: CategoryInfo[] = [
   },
   {
     id: "honey-oil",
+    art: "jar",
     label: "মধু, তেল ও ঘি",
     blurb: "চাকের মধু, ঘানির তেল, গাওয়া ঘি",
     intro: "মুসুফির মধু আসে মৌয়ালদের কাছ থেকে, সরিষার তেল কাঠের ঘানিতে ভাঙা, আর ঘি নিজেদের রান্নাঘরে বানানো। কোনোটিতে মিশ্রণ বা প্রিজারভেটিভ নেই।",
@@ -57,6 +64,7 @@ export const categories: CategoryInfo[] = [
   },
   {
     id: "homemade",
+    art: "pickle",
     label: "ঘরের খাবার",
     blurb: "আচার, গুড়, মুড়ি, ছোট ব্যাচে",
     intro: "আচার, পাটালি গুড় আর হাতে ভাজা মুড়ি ছোট ব্যাচে তৈরি হয়। প্রতিটি বয়াম বা প্যাকেটে তৈরির তারিখ আর মেয়াদ লেখা থাকে।",
@@ -85,12 +93,18 @@ export type ProductImage = {
 };
 
 export type Variant = {
+  /** Database id (absent in the starter catalogue). */
+  id?: number;
   label: string; // "১ লিটার", "কাটা ও ধোয়া, ১ কেজি"
   price: number; // taka
   compareAt?: number; // old price, only when there is a real discount
+  /** Units in stock; undefined = not tracked (always orderable). */
+  stock?: number;
 };
 
 export type Product = {
+  /** Database id (absent in the starter catalogue). */
+  id?: number;
   slug: string;
   name: string;
   short: string; // shown on cards
@@ -111,6 +125,8 @@ export type Product = {
   taste?: Taste;
   /** Product photos in display order. When empty, a default photo checklist is shown. */
   images?: ProductImage[];
+  metaTitle?: string;
+  metaDescription?: string;
 };
 
 export type TasteKey = "sweet" | "sour" | "spicy" | "pungent" | "bitter" | "salty";
@@ -554,9 +570,9 @@ export function productsIn(id: CategoryId): Product[] {
 }
 
 /** Lightweight card data that is safe to pass to client components. */
-export type CardProduct = Pick<Product, "slug" | "name" | "short" | "category" | "art" | "badge" | "variants" | "defaultVariant"> & { tasteLine?: string };
+export type CardProduct = Pick<Product, "slug" | "name" | "short" | "category" | "art" | "badge" | "variants" | "defaultVariant"> & { tasteLine?: string; image?: string };
 
 export function toCard(p: Product): CardProduct {
   const { slug, name, short, category, art, badge, variants, defaultVariant } = p;
-  return { slug, name, short, category, art, badge, variants, defaultVariant, tasteLine: p.taste?.oneLine };
+  return { slug, name, short, category, art, badge, variants, defaultVariant, tasteLine: p.taste?.oneLine, image: p.images?.[0]?.src };
 }

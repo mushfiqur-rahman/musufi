@@ -10,21 +10,24 @@ import { ProductPhoto } from "@/components/product-photo";
 import { ProductCard } from "@/components/product-shelf";
 import { ProductGallery } from "@/components/product-gallery";
 import { TasteProfile } from "@/components/taste-profile";
-import { categoryLabel, getCategory, getProduct, imagesFor, products, toCard } from "@/lib/products";
+import { findCategory, findProduct, getCatalog } from "@/lib/catalog";
+import { imagesFor, toCard } from "@/lib/products";
 import { site, taka } from "@/lib/site";
 
-export function generateStaticParams() {
+export async function generateStaticParams() {
+  const { products } = await getCatalog();
   return products.map((p) => ({ slug: p.slug }));
 }
 
 export async function generateMetadata({ params }: PageProps<"/products/[slug]">): Promise<Metadata> {
   const { slug } = await params;
-  const p = getProduct(slug);
+  const p = findProduct(await getCatalog(), slug);
   if (!p) return {};
   const from = Math.min(...p.variants.map((v) => v.price));
   return {
-    title: p.name,
-    description: `${p.summary} দাম ${taka(from)} থেকে। সারা দেশে ক্যাশ অন ডেলিভারি।`,
+    // Admin-set SEO fields win; otherwise build them from the product.
+    title: p.metaTitle || p.name,
+    description: p.metaDescription || `${p.summary} দাম ${taka(from)} থেকে। সারা দেশে ক্যাশ অন ডেলিভারি।`,
     alternates: { canonical: `/products/${p.slug}` },
     openGraph: { type: "website", title: p.name, description: p.summary, url: `/products/${p.slug}` },
   };
@@ -54,12 +57,14 @@ function ProductFallback() {
 
 async function ProductView({ params }: { params: PageProps<"/products/[slug]">["params"] }) {
   const { slug } = await params;
-  const p = getProduct(slug);
+  const catalog = await getCatalog();
+  const p = findProduct(catalog, slug);
   if (!p) notFound();
+  const cat = findCategory(catalog, p.category);
+  if (!cat) notFound();
 
-  const related = p.related.map(getProduct).filter((x) => x !== undefined);
+  const related = p.related.map((s) => findProduct(catalog, s)).filter((x) => x !== undefined);
   const { dhaka, outside } = site.delivery;
-  const cat = getCategory(p.category);
   const faqs = [...p.faq, ...cat.faq];
   const dhakaOnly = !cat.zones.includes("outside");
   const url = `${site.url}/products/${p.slug}`;
@@ -71,7 +76,7 @@ async function ProductView({ params }: { params: PageProps<"/products/[slug]">["
     description: p.summary,
     url,
     image: imagesFor(p).filter((im) => im.src).map((im) => `${site.url}${im.src}`),
-    category: categoryLabel(p.category),
+    category: cat.label,
     brand: { "@type": "Brand", name: site.name },
     countryOfOrigin: "BD",
     offers: p.variants.map((v) => ({
@@ -89,7 +94,7 @@ async function ProductView({ params }: { params: PageProps<"/products/[slug]">["
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "হোম", item: site.url },
-      { "@type": "ListItem", position: 2, name: categoryLabel(p.category), item: `${site.url}/category/${p.category}` },
+      { "@type": "ListItem", position: 2, name: cat.label, item: `${site.url}/category/${p.category}` },
       { "@type": "ListItem", position: 3, name: p.name, item: url },
     ],
   };
@@ -99,7 +104,7 @@ async function ProductView({ params }: { params: PageProps<"/products/[slug]">["
       <nav className="crumbs" aria-label="আপনি এখানে আছেন">
         <ol>
           <li><Link href="/">হোম</Link></li>
-          <li><Link href={`/category/${p.category}`}>{categoryLabel(p.category)}</Link></li>
+          <li><Link href={`/category/${p.category}`}>{cat.label}</Link></li>
           <li aria-current="page">{p.name}</li>
         </ol>
       </nav>

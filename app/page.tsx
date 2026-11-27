@@ -4,18 +4,11 @@ import { CashIcon, PinIcon, ReturnIcon, TruckIcon, WhatsAppIcon } from "@/compon
 import { JsonLd } from "@/components/json-ld";
 import { ProductPhoto } from "@/components/product-photo";
 import { ProductShelf } from "@/components/product-shelf";
-import { categories, productsIn, products, toCard, type Art, type CategoryId } from "@/lib/products";
+import { getCatalog, productsInCategory } from "@/lib/catalog";
+import { toCard } from "@/lib/products";
 import { bn, site, taka, whatsappLink } from "@/lib/site";
 
 const { dhaka, outside } = site.delivery;
-
-// One illustration per category tile, until real category photos exist.
-const categoryArt: Record<CategoryId, Art> = {
-  fish: "fish",
-  spices: "stem",
-  "honey-oil": "jar",
-  homemade: "pickle",
-};
 
 // Home page is organised as the questions a first-time visitor asks, in order.
 // Each section heading is the question; the line under it is the direct answer.
@@ -42,9 +35,12 @@ const faqs: QA[] = [
   },
 ];
 
-export default function Home() {
-  const featured = products.find((p) => p.slug === "bhetki") ?? products[0];
-  const fv = featured.variants[featured.defaultVariant];
+export default async function Home() {
+  const catalog = await getCatalog();
+  const { categories, products } = catalog;
+  // Featured = first product in the admin's sort order.
+  const featured = products[0];
+  const fv = featured?.variants[featured.defaultVariant];
   return (
     <>
       <section className="hero" aria-labelledby="h-home">
@@ -65,9 +61,10 @@ export default function Home() {
             </nav>
           </div>
 
+          {featured && fv && (
           <article className="hero-pick" aria-labelledby="h-pick">
             <Link href={`/products/${featured.slug}`} className="hp-media" tabIndex={-1} aria-hidden="true">
-              <ProductPhoto label="" art={featured.art} />
+              <ProductPhoto label="" art={featured.art} src={featured.images?.[0]?.src} />
               <span className="tag">এই সপ্তাহের বাছাই</span>
             </Link>
             <div className="hp-body">
@@ -80,6 +77,7 @@ export default function Home() {
               </div>
             </div>
           </article>
+          )}
         </div>
 
         <div className="wrap">
@@ -104,11 +102,11 @@ export default function Home() {
             {categories.map((c) => (
               <li key={c.id}>
                 <Link href={`/category/${c.id}`}>
-                  <span className="ct-art"><ProductPhoto label="" art={categoryArt[c.id]} /></span>
+                  <span className="ct-art"><ProductPhoto label="" art={c.art ?? "jar"} /></span>
                   <span className="ct-text">
                     <b>{c.label}</b>
                     <small>{c.blurb}</small>
-                    <small className="ct-count num">{bn(productsIn(c.id).length)}টি পণ্য →</small>
+                    <small className="ct-count num">{bn(productsInCategory(catalog, c.id).length)}টি পণ্য →</small>
                   </span>
                 </Link>
               </li>
@@ -125,7 +123,7 @@ export default function Home() {
               <p>সব পণ্যের দাম নিচে। পরিমাণ বদলালে দাম বদলে যায়, ডেলিভারি চার্জ আলাদা।</p>
             </div>
           </div>
-          <ProductShelf items={products.map(toCard)} />
+          <ProductShelf items={products.map(toCard)} categories={categories.map((c) => ({ id: c.id, label: c.label }))} />
         </div>
       </section>
 
