@@ -7,6 +7,14 @@ export function dbConfigured(): boolean {
   return Boolean(env("DB_HOST") && env("DB_NAME") && env("DB_USER") && env("DB_PASSWORD"));
 }
 
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+
+/** How the pool reaches the database (shown, without names, in error reasons). */
+function via(): "socket" | "tcp-local" | "tcp-remote" {
+  if (env("DB_SOCKET")) return "socket";
+  return LOCAL_HOSTS.has(env("DB_HOST").toLowerCase()) ? "tcp-local" : "tcp-remote";
+}
+
 // Keep one pool across hot reloads in development.
 const globalForDb = globalThis as unknown as { musufiPool?: Pool };
 
@@ -42,12 +50,24 @@ function pool(): Pool {
 export type Row = RowDataPacket;
 
 /**
- * Short, safe reason for a database failure, e.g. "ECONNREFUSED" or "ER_ACCESS_DENIED_ERROR".
- * Only the error code: never the message, host, user or password.
+ * Short, safe reason for a database failure, e.g. "ECONNREFUSED via=tcp-local" or
+ * "ER_ACCESS_DENIED_ERROR via=tcp-remote seen-as=remote". Never the message, host,
+ * user or password: only the error code, how we connect, and (for access denied)
+ * whether the database saw us as a local or a remote client. That is enough to
+ * tell "wrong DB_HOST" from "wrong password" without exposing anything.
  */
 export function dbErrorReason(e: unknown): string {
-  const code = (e as { code?: unknown })?.code;
-  return typeof code === "string" && /^[A-Z_0-9]{3,40}$/.test(code) ? code : "UNKNOWN";
+  const raw = (e as { code?: unknown })?.code;
+  const code = typeof raw === "string" && /^[A-Z_0-9]{3,40}$/.test(raw) ? raw : "UNKNOWN";
+  if (code === "UNKNOWN") return code;
+  let reason = `${code} via=${via()}`;
+  if (code === "ER_ACCESS_DENIED_ERROR") {
+    const msg = e instanceof Error ? e.message : "";
+    const host = /@'([^']*)'/.exec(msg)?.[1];
+    if (host) reason += ` seen-as=${LOCAL_HOSTS.has(host.toLowerCase()) ? "local" : "remote"}`;
+    if (msg.includes("using password: NO")) reason += " no-password";
+  }
+  return reason;
 }
 
 export async function select<T>(sql: string, params: unknown[] = []): Promise<T[]> {
