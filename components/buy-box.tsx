@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import type { Variant } from "@/lib/products";
 import { bn, site, taka, whatsappLink, type DeliveryZone } from "@/lib/site";
+import { zoneForDistrict } from "@/lib/geo";
+import { AddressPicker, checkAddress, emptyAddress, type AddressErrors, type AddressValue } from "./address-picker";
 import { PhoneIcon, WhatsAppIcon } from "./icons";
 
 const BN = "০১২৩৪৫৬৭৮৯";
@@ -12,7 +14,7 @@ const BD_MOBILE = /^01[3-9]\d{8}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 type Status = { kind: "idle" } | { kind: "sending" } | { kind: "ok"; text: string } | { kind: "bad"; text: string } | { kind: "info"; text: string };
-type Me = { email: string; name: string | null; phone: string | null; address: string | null };
+type Me = { email: string; name: string | null; phone: string | null; address: string | null; addressParts?: AddressValue | null };
 
 async function postJson(url: string, data: unknown): Promise<{ ok: boolean; status: number; body: Record<string, unknown> }> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) });
@@ -21,16 +23,21 @@ async function postJson(url: string, data: unknown): Promise<{ ok: boolean; stat
 }
 
 export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: string; name: string; variants: Variant[]; defaultVariant: number; zones: DeliveryZone[] }) {
-  const [sel, setSel] = useState(defaultVariant);
+  // Untracked stock (undefined) is always available.
+  const soldOut = (x: Variant) => x.stock !== undefined && x.stock <= 0;
+  const firstAvailable = soldOut(variants[defaultVariant]) ? Math.max(0, variants.findIndex((x) => !soldOut(x))) : defaultVariant;
+  const allSoldOut = variants.every(soldOut);
+  const [sel, setSel] = useState(firstAvailable);
   const [qty, setQty] = useState(1);
-  const [zone, setZone] = useState<DeliveryZone>(zones[0] ?? "dhaka");
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const id = useId();
 
   // Who is logged in. Product pages are static, so this is asked after load.
   const [me, setMe] = useState<Me | null>(null);
-  const [fields, setFields] = useState({ name: "", phone: "", address: "", email: "" });
-  const [errors, setErrors] = useState<Partial<Record<"name" | "phone" | "address" | "email", string>>>({});
+  const [fields, setFields] = useState({ name: "", phone: "", email: "" });
+  const [addr, setAddr] = useState<AddressValue>(emptyAddress);
+  const [errors, setErrors] = useState<Partial<Record<"name" | "phone" | "email", string>>>({});
+  const [addrErrors, setAddrErrors] = useState<AddressErrors>({});
   const [step, setStep] = useState<"form" | "code">("form");
   const [code, setCode] = useState("");
   const codeRef = useRef<HTMLInputElement>(null);
@@ -50,9 +57,10 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
         setFields((f) => ({
           name: f.name || d.customer!.name || "",
           phone: f.phone || d.customer!.phone || "",
-          address: f.address || d.customer!.address || "",
           email: d.customer!.email,
         }));
+        // Pre-fill the last structured address, if any.
+        if (d.customer.addressParts) setAddr((a) => (a.divisionId ? a : { ...emptyAddress, ...d.customer!.addressParts }));
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -61,33 +69,45 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
   useEffect(() => { if (step === "code") codeRef.current?.focus(); }, [step]);
 
   const v = variants[sel];
-  const fee = site.delivery[zone].fee;
+  // The delivery zone follows the chosen district (Dhaka district = inside Dhaka).
+  const zone: DeliveryZone | null = addr.districtId ? zoneForDistrict(addr.districtId) : null;
+  const zoneAllowed = zone === null || zones.includes(zone);
+  const fee = zone ? site.delivery[zone].fee : 0;
   const subtotal = v.price * qty;
   const total = subtotal + fee;
   const busy = status.kind === "sending";
-  const set = (k: keyof typeof fields) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setFields((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k: keyof typeof fields) => (e: React.ChangeEvent<HTMLInputElement>) => setFields((f) => ({ ...f, [k]: e.target.value }));
 
   function check(): boolean {
     const phone = toLatinDigits(fields.phone).replace(/\D/g, "");
     const e: typeof errors = {};
     if (fields.name.trim().length < 2) e.name = "আপনার নাম দিন।";
     if (!BD_MOBILE.test(phone)) e.phone = "১১ সংখ্যার মোবাইল নম্বর দিন, যেমন ০১৭১২৩৪৫৬৭৮";
-    if (fields.address.trim().length < 10) e.address = "বাসা, রাস্তা, এলাকা আর জেলাসহ পুরো ঠিকানা দিন।";
     if (!me && !EMAIL_RE.test(fields.email.trim())) e.email = "সঠিক ইমেইল ঠিকানা দিন, যেমন name@gmail.com";
+    const ae = checkAddress(addr);
     setErrors(e);
-    const first = (["name", "phone", "address", "email"] as const).find((k) => e[k]);
+    setAddrErrors(ae);
+    const first = (["name", "phone"] as const).find((k) => e[k]) ?? (Object.keys(ae)[0] as keyof AddressValue | undefined) ?? (e.email ? "email" : undefined);
     if (first) document.getElementById(`${id}-${first}`)?.focus();
-    return !first;
+    if (first) return false;
+    if (!zoneAllowed) {
+      setStatus({ kind: "bad", text: "এই পণ্য এখন শুধু ঢাকার ভেতরে ডেলিভারি হয়। ঢাকার ঠিকানা দিন বা অন্য পণ্য দেখুন।" });
+      return false;
+    }
+    return true;
   }
 
   async function placeOrder() {
     setStatus({ kind: "sending" });
     try {
       const r = await postJson("/api/order", {
-        slug, variant: sel, qty, zone,
+        slug, variant: sel, qty,
         name: fields.name.trim(),
         phone: toLatinDigits(fields.phone).replace(/\D/g, ""),
-        address: fields.address.trim(),
+        address: {
+          divisionId: addr.divisionId, districtId: addr.districtId, upazilaId: addr.upazilaId,
+          localId: addr.localId === "" ? null : addr.localId, line: addr.line.trim(),
+        },
         website: (document.getElementById(`${id}-web`) as HTMLInputElement | null)?.value ?? "",
       });
       if (r.status === 401) { setMe(null); setStep("form"); setStatus({ kind: "bad", text: String(r.body.message ?? "আবার লগইন করুন।") }); return; }
@@ -155,6 +175,7 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
           )}
         </p>
         <p className="unit">{v.label}</p>
+        {allSoldOut && <p className="notice bad" role="status">এই পণ্য এখন স্টকে নেই। হোয়াটসঅ্যাপে জানালে স্টক এলে জানিয়ে দেব।</p>}
       </div>
 
       {variants.length > 1 && (
@@ -162,8 +183,8 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
           <legend>পরিমাণ বেছে নিন</legend>
           <div className="sizes lg">
             {variants.map((x, i) => (
-              <button key={x.label} type="button" aria-pressed={i === sel} onClick={() => setSel(i)}>
-                {x.label}
+              <button key={x.label} type="button" aria-pressed={i === sel} onClick={() => setSel(i)} disabled={soldOut(x)} className={soldOut(x) ? "sold" : undefined}>
+                {x.label}{soldOut(x) ? " · স্টক নেই" : x.stock !== undefined && x.stock <= 5 ? ` · মাত্র ${bn(x.stock)}টি` : ""}
               </button>
             ))}
           </div>
@@ -211,11 +232,6 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
             <span className="hint" id={`${id}-ph`}>এই নম্বরে ফোন করে অর্ডার নিশ্চিত করব</span>
             {err("phone")}
           </div>
-          <div className="field">
-            <label htmlFor={`${id}-address`}>পুরো ঠিকানা</label>
-            <textarea id={`${id}-address`} value={fields.address} onChange={set("address")} autoComplete="street-address" placeholder="বাসা, রাস্তা, এলাকা, থানা, জেলা" aria-invalid={!!errors.address} aria-describedby={described("address")} />
-            {err("address")}
-          </div>
           {!me && (
             <div className="field">
               <label htmlFor={`${id}-email`}>ইমেইল</label>
@@ -224,24 +240,14 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
               {err("email")}
             </div>
           )}
-          <fieldset className="field">
-            <legend>ডেলিভারি এলাকা</legend>
-            <div className="zones">
-              {(Object.keys(site.delivery) as DeliveryZone[]).map((z) => (
-                <label key={z}>
-                  <input type="radio" name="zone" value={z} checked={zone === z} disabled={!zones.includes(z)} onChange={() => setZone(z)} />
-                  <span>{site.delivery[z].label} · <span className="num">{taka(site.delivery[z].fee)}</span></span>
-                  <small>{site.delivery[z].days}</small>
-                </label>
-              ))}
-            </div>
-            {!zones.includes("outside") && <p className="zone-note">এই পণ্য এখন শুধু ঢাকার ভেতরে ডেলিভারি হয়।</p>}
-          </fieldset>
+          <AddressPicker id={id} value={addr} onChange={(a) => { setAddr(a); setAddrErrors({}); }} errors={addrErrors} />
+          {!zones.includes("outside") && <p className="zone-note">এই পণ্য এখন শুধু ঢাকার ভেতরে ডেলিভারি হয়।</p>}
+          {!zoneAllowed && <p className="notice bad" role="alert">এই ঠিকানায় এই পণ্য পাঠানো যায় না। ঢাকা জেলার ঠিকানা দিন।</p>}
         </fieldset>
 
         <div className="total num" aria-live="polite">
           <div><span>{name} {v.label} × {bn(qty)}</span><span>{taka(subtotal)}</span></div>
-          <div><span>ডেলিভারি</span><span>{taka(fee)}</span></div>
+          <div><span>ডেলিভারি</span><span>{zone ? taka(fee) : "জেলা বেছে নিলে দেখাবে"}</span></div>
           <div className="grand"><span>মোট, হাতে পেয়ে দিবেন</span><span>{taka(total)}</span></div>
         </div>
 
@@ -268,7 +274,7 @@ export function BuyBox({ slug, name, variants, defaultVariant, zones }: { slug: 
           </div>
         )}
 
-        <button className="btn btn-primary btn-lg" type="submit" disabled={busy || status.kind === "ok" || (step === "code" && code.length !== 6)}>
+        <button className="btn btn-primary btn-lg" type="submit" disabled={busy || allSoldOut || soldOut(v) || status.kind === "ok" || (step === "code" && code.length !== 6)}>
           {busy ? "অপেক্ষা করুন..." : step === "code" ? "কোড মিলিয়ে অর্ডার করুন" : me ? "অর্ডার নিশ্চিত করুন" : "কোড পাঠিয়ে অর্ডার করুন"}
         </button>
         {(status.kind === "ok" || status.kind === "bad" || status.kind === "info") && (

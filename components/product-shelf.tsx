@@ -10,11 +10,12 @@ export function ProductCard({ p, headingLevel = 3 }: { p: CardProduct; headingLe
   const [sel, setSel] = useState(p.defaultVariant);
   const v = p.variants[sel];
   const href = `/products/${p.slug}`;
+  const allSoldOut = p.variants.every((x) => x.stock !== undefined && x.stock <= 0);
   const H = headingLevel === 2 ? "h2" : "h3";
   return (
     <article className="card">
       <Link className="media" href={href} tabIndex={-1} aria-hidden="true">
-        {p.badge && <span className={`tag${p.badge === "ঘরে তৈরি" ? " green" : ""}`}>{p.badge}</span>}
+        {allSoldOut ? <span className="tag sold">স্টক শেষ</span> : p.badge && <span className={`tag${p.badge === "ঘরে তৈরি" ? " green" : ""}`}>{p.badge}</span>}
         <ProductPhoto label="" art={p.art} src={p.image} />
       </Link>
       <div className="body">
@@ -24,7 +25,7 @@ export function ProductCard({ p, headingLevel = 3 }: { p: CardProduct; headingLe
         {p.variants.length > 1 ? (
           <div className="sizes" role="group" aria-label={`${p.name}: পরিমাণ`}>
             {p.variants.map((x, i) => (
-              <button key={x.label} type="button" aria-pressed={i === sel} onClick={() => setSel(i)}>
+              <button key={x.label} type="button" aria-pressed={i === sel} onClick={() => setSel(i)} className={x.stock !== undefined && x.stock <= 0 ? "sold" : undefined}>
                 {x.label}
               </button>
             ))}

@@ -2,6 +2,7 @@
 import { execute, select, selectOne, transaction } from "./db";
 import { newOrderNo } from "./mailer";
 import type { Orderable } from "./catalog";
+import type { AddressParts } from "./geo";
 import type { DeliveryZone } from "./site";
 
 export const STATUSES = ["new", "confirmed", "shipped", "delivered", "returned", "cancelled"] as const;
@@ -26,7 +27,9 @@ export type NewOrder = {
   deliveryFee: number;
   name: string;
   phone: string;
+  /** Full address line (see lib/geo.ts formatAddress). */
   address: string;
+  parts: AddressParts;
 };
 
 /** Thrown when a tracked variant doesn't have enough stock left. */
@@ -57,9 +60,11 @@ export async function createOrder(o: NewOrder): Promise<{ orderNo: string; subto
         if (v.stock !== null && stock.affectedRows !== 1) throw new OutOfStockError(`Not enough stock for variant ${v.id}`);
 
         const [res] = await conn.query<import("mysql2").ResultSetHeader>(
-          `INSERT INTO orders (order_no, customer_id, name, phone, address, zone, subtotal, delivery_fee, total, cost_total)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [orderNo, o.customerId, o.name, o.phone, o.address, o.zone, subtotal, o.deliveryFee, total, cost === null ? null : cost * o.qty],
+          `INSERT INTO orders (order_no, customer_id, name, phone, address, division_id, district_id, upazila_id, local_id, address_line,
+                               zone, subtotal, delivery_fee, total, cost_total)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [orderNo, o.customerId, o.name, o.phone, o.address, o.parts.divisionId, o.parts.districtId, o.parts.upazilaId, o.parts.localId,
+           o.parts.line, o.zone, subtotal, o.deliveryFee, total, cost === null ? null : cost * o.qty],
         );
         await conn.query(
           `INSERT INTO order_items (order_id, product_slug, product_name, variant_index, variant_id, variant_label, unit_price, unit_cost, qty)
@@ -67,7 +72,7 @@ export async function createOrder(o: NewOrder): Promise<{ orderNo: string; subto
           [res.insertId, o.product.slug, o.product.name, o.variantIndex, v.id, v.label, v.price, cost, o.qty],
         );
         await conn.query("INSERT INTO order_events (order_id, status, note) VALUES (?, 'new', 'ওয়েবসাইট থেকে অর্ডার')", [res.insertId]);
-        await conn.query("UPDATE customers SET name = ?, phone = ?, address = ? WHERE id = ?", [o.name, o.phone, o.address, o.customerId]);
+        await conn.query("UPDATE customers SET name = ?, phone = ?, address = ?, address_parts = ? WHERE id = ?", [o.name, o.phone, o.address, JSON.stringify(o.parts), o.customerId]);
       });
       return { orderNo, subtotal, total };
     } catch (e) {

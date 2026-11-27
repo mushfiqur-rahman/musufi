@@ -17,5 +17,5 @@ export async function POST(request: Request) {
   }
   if (!result.ok) return Response.json({ message: result.message }, { status: result.status });
   const c = result.customer;
-  return Response.json({ customer: { email: c.email, name: c.name, phone: c.phone, address: c.address, isAdmin: c.isAdmin } });
+  return Response.json({ customer: { email: c.email, name: c.name, phone: c.phone, address: c.address, addressParts: c.addressParts, isAdmin: c.isAdmin } });
 }

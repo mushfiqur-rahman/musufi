@@ -639,3 +639,15 @@ legend { font-weight: 600; margin-bottom: 8px; padding: 0; }
 .perm-table td { text-align: center; }
 .role-notes { display: grid; gap: 4px; margin-top: 10px; }
 .details { font-size: 0.78rem; color: var(--muted); word-break: break-all; }
+
+/* Address picker */
+.address-picker { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 12px; margin: 0; min-width: 0; }
+.address-picker > legend { padding: 0 6px; font-weight: 600; }
+.addr-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 420px) { .addr-grid { grid-template-columns: 1fr; } }
+.address-picker select:disabled { opacity: 0.55; }
+.ok-note { background: var(--leaf-50) !important; color: var(--green) !important; }
+
+/* Sold-out sizes */
+.sizes button.sold, .sizes button:disabled { text-decoration: line-through; opacity: 0.55; cursor: not-allowed; }
+.tag.sold { background: var(--fg); color: var(--bg); }

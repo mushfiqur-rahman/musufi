@@ -4,6 +4,8 @@ import { dbConfigured } from "@/lib/db";
 import { mailConfigured, sendOrderAlert, sendOrderConfirmation, smtpReady } from "@/lib/mailer";
 import { createOrder, OutOfStockError } from "@/lib/orders";
 import { serverTrouble } from "@/lib/api";
+import { findDistrict, findDivision, findUpazila, formatAddress, localLabel, zoneForDistrict, type AddressParts } from "@/lib/geo";
+import { findUnion } from "@/lib/geo-unions";
 import { site, type DeliveryZone } from "@/lib/site";
 
 const BD_MOBILE = /^01[3-9]\d{8}$/;
@@ -12,11 +14,48 @@ type OrderInput = {
   slug: string;
   variant: number;
   qty: number;
+  /** Worked out from the district, never taken from the browser. */
   zone: DeliveryZone;
   name: string;
   phone: string;
+  /** Full line for couriers and emails. */
   address: string;
+  parts: AddressParts;
 };
+
+/** Validates the chosen areas against the official list and builds the address line. */
+function parseAddress(v: unknown): { ok: true; parts: AddressParts; line: string } | { ok: false; message: string } {
+  if (!v || typeof v !== "object") return { ok: false, message: "ঠিকানা দিন।" };
+  const a = v as Record<string, unknown>;
+  const division = findDivision(Number(a.divisionId));
+  const district = findDistrict(Number(a.districtId));
+  const upazila = findUpazila(Number(a.upazilaId));
+  if (!division) return { ok: false, message: "বিভাগ বেছে নিন।" };
+  if (!district || district.divisionId !== division.id) return { ok: false, message: "জেলা বেছে নিন।" };
+  if (!upazila || upazila.districtId !== district.id) return { ok: false, message: "উপজেলা বা থানা বেছে নিন।" };
+  const line = typeof a.line === "string" ? a.line.trim() : "";
+  if (line.length < 5 || line.length > 200) return { ok: false, message: "গ্রাম/এলাকা, রাস্তা আর বাসার নম্বর লিখুন।" };
+  let localId: number | null = null;
+  let local = "";
+  if (a.localId !== null && a.localId !== undefined && a.localId !== "") {
+    const n = Number(a.localId);
+    if (upazila.city) {
+      if (!Number.isInteger(n) || !upazila.postOffices[n]) return { ok: false, message: "পোস্ট অফিস আবার বেছে নিন।" };
+      localId = n;
+      local = localLabel(upazila, n);
+    } else {
+      const union = Number.isInteger(n) ? findUnion(upazila.id, n) : undefined;
+      if (!union) return { ok: false, message: "ইউনিয়ন আবার বেছে নিন।" };
+      localId = n;
+      local = `${union.bn} ইউনিয়ন`;
+    }
+  }
+  return {
+    ok: true,
+    parts: { divisionId: division.id, districtId: district.id, upazilaId: upazila.id, localId, line },
+    line: formatAddress({ line, local, upazila, district, division }),
+  };
+}
 
 /** Checks the request's shape. Product, size, stock and zone are checked later against the database. */
 function validate(body: unknown): { ok: true; order: OrderInput } | { ok: false; message: string } {
@@ -28,14 +67,13 @@ function validate(body: unknown): { ok: true; order: OrderInput } | { ok: false;
   if (!Number.isInteger(variant) || variant < 0 || variant > 50) return { ok: false, message: "পরিমাণটি সঠিক নয়।" };
   const qty = Number(b.qty);
   if (!Number.isInteger(qty) || qty < 1 || qty > 20) return { ok: false, message: "সংখ্যা ১ থেকে ২০-এর মধ্যে দিন।" };
-  if (b.zone !== "dhaka" && b.zone !== "outside") return { ok: false, message: "ডেলিভারি এলাকা বেছে নিন।" };
   const name = typeof b.name === "string" ? b.name.trim() : "";
   const phone = typeof b.phone === "string" ? b.phone.trim() : "";
-  const address = typeof b.address === "string" ? b.address.trim() : "";
   if (name.length < 2 || name.length > 80) return { ok: false, message: "আপনার নাম দিন।" };
   if (!BD_MOBILE.test(phone)) return { ok: false, message: "১১ সংখ্যার মোবাইল নম্বর দিন।" };
-  if (address.length < 10 || address.length > 300) return { ok: false, message: "পুরো ঠিকানা দিন।" };
-  return { ok: true, order: { slug, variant, qty, zone: b.zone, name, phone, address } };
+  const addr = parseAddress(b.address);
+  if (!addr.ok) return addr;
+  return { ok: true, order: { slug, variant, qty, zone: zoneForDistrict(addr.parts.districtId), name, phone, address: addr.line, parts: addr.parts } };
 }
 
 /** Product rules against the live database row. */
@@ -120,6 +158,7 @@ export async function POST(request: Request) {
       name: o.name,
       phone: o.phone,
       address: o.address,
+      parts: o.parts,
     });
   } catch (err) {
     if (err instanceof OutOfStockError) {

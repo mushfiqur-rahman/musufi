@@ -8,7 +8,7 @@ export async function GET() {
   return Response.json(
     {
       loginAvailable: true,
-      customer: c ? { email: c.email, name: c.name, phone: c.phone, address: c.address, isAdmin: c.isAdmin } : null,
+      customer: c ? { email: c.email, name: c.name, phone: c.phone, address: c.address, addressParts: c.addressParts, isAdmin: c.isAdmin } : null,
     },
     { headers: { "cache-control": "private, no-store" } },
   );

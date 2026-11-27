@@ -16,6 +16,8 @@ export type Customer = {
   name: string | null;
   phone: string | null;
   address: string | null;
+  /** Last structured address (division/district/upazila/union ids + line), for pre-filling. */
+  addressParts: unknown;
   /** Staff role, or null for an ordinary customer. Owners from ADMIN_EMAILS are always "owner". */
   role: Role | null;
   /** True for any staff role: may open /admin (each page checks its own permission). */
@@ -137,6 +139,7 @@ type CustomerRow = {
   name: string | null;
   phone: string | null;
   address: string | null;
+  address_parts: unknown;
   role: string | null;
   blocked_at: Date | null;
 };
@@ -149,11 +152,13 @@ export function effectiveRole(email: string, dbRole: string | null): Role | null
 
 function toCustomer(r: CustomerRow): Customer {
   const role = effectiveRole(r.email, r.role);
-  return { id: r.id, email: r.email, name: r.name, phone: r.phone, address: r.address, role, isAdmin: role !== null };
+  let addressParts: unknown = r.address_parts;
+  if (typeof addressParts === "string") { try { addressParts = JSON.parse(addressParts); } catch { addressParts = null; } }
+  return { id: r.id, email: r.email, name: r.name, phone: r.phone, address: r.address, addressParts, role, isAdmin: role !== null };
 }
 
 async function customerByEmail(email: string): Promise<Customer | null> {
-  const r = await selectOne<CustomerRow>("SELECT id, email, name, phone, address, role, blocked_at FROM customers WHERE email = ?", [email]);
+  const r = await selectOne<CustomerRow>("SELECT id, email, name, phone, address, address_parts, role, blocked_at FROM customers WHERE email = ?", [email]);
   return r ? toCustomer(r) : null;
 }
 
@@ -162,7 +167,7 @@ export async function currentCustomer(): Promise<Customer | null> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const r = await selectOne<CustomerRow>(
-    `SELECT c.id, c.email, c.name, c.phone, c.address, c.role, c.blocked_at
+    `SELECT c.id, c.email, c.name, c.phone, c.address, c.address_parts, c.role, c.blocked_at
      FROM sessions s JOIN customers c ON c.id = s.customer_id
      WHERE s.token_hash = ? AND s.expires_at > UTC_TIMESTAMP()`,
     [sha256(token)],
