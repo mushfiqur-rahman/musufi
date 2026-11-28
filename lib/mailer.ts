@@ -81,7 +81,7 @@ export async function sendOrderAlert(o: OrderAlert): Promise<void> {
 
   const html = `<!doctype html><html lang="bn"><body style="margin:0;background:#f5f8f4;font-family:Arial,'Hind Siliguri',sans-serif;color:#1a2820">
 <div style="max-width:560px;margin:0 auto;padding:24px 16px">
-  <h1 style="font-size:20px;margin:0 0 4px;color:#23613f">নতুন অর্ডার ${esc(o.orderNo)}</h1>
+  <h1 style="font-size:20px;margin:0 0 4px;color:#097f00">নতুন অর্ডার ${esc(o.orderNo)}</h1>
   <p style="margin:0 0 16px;color:#55665b">ক্রেতাকে ফোন করে অর্ডার নিশ্চিত করুন।</p>
   <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #dce5dd">
     ${rows
@@ -91,7 +91,7 @@ export async function sendOrderAlert(o: OrderAlert): Promise<void> {
       )
       .join("")}
   </table>
-  <p style="margin:20px 0 0"><a href="tel:${esc(o.phone)}" style="display:inline-block;background:#23613f;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">ক্রেতাকে কল করুন ${esc(o.phone)}</a></p>
+  <p style="margin:20px 0 0"><a href="tel:${esc(o.phone)}" style="display:inline-block;background:#097f00;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">ক্রেতাকে কল করুন ${esc(o.phone)}</a></p>
   <p style="margin:24px 0 0;font-size:12px;color:#55665b">${esc(site.nameLatin)} · ${esc(site.url)}</p>
 </div></body></html>`;
 
@@ -112,7 +112,7 @@ export function smtpReady(): boolean {
 function shell(title: string, body: string): string {
   return `<!doctype html><html lang="bn"><body style="margin:0;background:#f5f8f4;font-family:Arial,'Hind Siliguri',sans-serif;color:#1a2820">
 <div style="max-width:520px;margin:0 auto;padding:24px 16px">
-  <p style="margin:0 0 16px;font-weight:700;font-size:18px;color:#23613f">${esc(site.name)}</p>
+  <p style="margin:0 0 16px;font-weight:700;font-size:18px;color:#097f00">${esc(site.name)}</p>
   <h1 style="font-size:20px;margin:0 0 12px">${esc(title)}</h1>
   ${body}
   <p style="margin:28px 0 0;font-size:12px;color:#55665b">${esc(site.slogan)}<br>${esc(site.url)}</p>

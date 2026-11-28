@@ -22,6 +22,7 @@ const NAV: { href: string; label: string; perm: Permission }[] = [
   { href: "/admin/coupons", label: "কুপন", perm: "marketing.manage" },
   { href: "/admin/reviews", label: "রিভিউ", perm: "marketing.manage" },
   { href: "/admin/pages", label: "পেজ ও ঘোষণা", perm: "content.manage" },
+  { href: "/admin/menu", label: "মেনু", perm: "content.manage" },
   { href: "/admin/reports", label: "লাভ-ক্ষতি", perm: "reports.view" },
   { href: "/admin/expenses", label: "খরচ", perm: "finance.manage" },
   { href: "/admin/costs", label: "পার্সেল খরচ", perm: "finance.manage" },

@@ -1,72 +1,198 @@
 "use client";
 
+// Site header, two tiers:
+// - Row 1 (white): menu button (phones), logo, product search, call + account.
+//   On phones the search box drops to its own row under the logo.
+// - Row 2 (computers, solid green): "সকল ক্যাটাগরি" dropdown, main links with
+//   the current page highlighted, and "আমার অর্ডার" on the right.
+// On phones the menu button opens a panel with two tabs: main menu / categories.
+
 import Link from "next/link";
-import { useState } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { site } from "@/lib/site";
 import { phoneText } from "@/lib/store-config";
-import { CloseIcon, LogoMark, MenuIcon, PhoneIcon, UserIcon } from "./icons";
-import { SearchBox } from "./search-box";
 import type { SearchItem } from "@/lib/search";
+import { CloseIcon, LogoMark, MenuIcon, UserIcon } from "./icons";
+import { SearchBox } from "./search-box";
 
-export type NavCategory = { id: string; label: string };
+export type NavCategory = { id: string; label: string; blurb?: string };
 
-const extra = [
-  { href: "/account", label: "আমার অর্ডার" },
-  { href: "/#delivery", label: "ডেলিভারি ও পেমেন্ট" },
-  { href: "/#faq", label: "প্রশ্ন ও উত্তর" },
-];
+const GridIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+    <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" />
+    <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
+  </svg>
+);
+const Chevron = ({ dir = "down" }: { dir?: "down" | "right" }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+    style={dir === "right" ? { transform: "rotate(-90deg)" } : undefined}>
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
 
-export function SiteHeader({ categories, phone, searchItems }: { categories: NavCategory[]; phone: string; searchItems: SearchItem[] }) {
+/** Which link is the current page ("/#…" links are sections of the home page, never "current"). */
+function isCurrent(href: string, path: string | null): boolean {
+  if (!path || href.includes("#")) return false;
+  if (href === "/") return path === "/";
+  return path === href || path.startsWith(`${href}/`);
+}
+
+type HeaderProps = {
+  categories: NavCategory[];
+  /** Main menu links, chosen by the admin (lib/menu.ts). */
+  menu: { href: string; label: string }[];
+  phone: string;
+  searchItems: SearchItem[];
+};
+
+/**
+ * Header with the current page highlighted. Reading the URL makes it request-time,
+ * so the layout renders <SiteHeader path={null}> as the instant fallback inside
+ * <Suspense> and this one streams in right after.
+ */
+export function SiteHeaderLive(props: HeaderProps) {
+  return <SiteHeader {...props} path={usePathname()} />;
+}
+
+/** `path` = current URL path, or null when not known yet (nothing highlighted). */
+export function SiteHeader({ categories, menu, phone, searchItems, path }: HeaderProps & { path: string | null }) {
   const phoneDisplay = phoneText(phone);
-  const [open, setOpen] = useState(false);
-  const links = categories.map((c) => ({ href: `/category/${c.id}`, label: c.label }));
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [tab, setTab] = useState<"menu" | "categories">("menu");
+  const [catsOpen, setCatsOpen] = useState(false);
+  const catsRef = useRef<HTMLDivElement>(null);
+
+  const catLinks = categories.map((c) => ({ href: `/category/${c.id}`, label: c.label, blurb: c.blurb }));
+  const mainLinks = menu;
+
+  // Close the category dropdown on an outside click or Escape.
+  useEffect(() => {
+    if (!catsOpen) return;
+    const onDown = (e: MouseEvent) => { if (catsRef.current && !catsRef.current.contains(e.target as Node)) setCatsOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setCatsOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [catsOpen]);
+
+  const closeAll = () => { setMenuOpen(false); setCatsOpen(false); };
+
   return (
     <header className="site-header">
-      <div className="wrap bar">
-        <Link className="logo" href="/" aria-label={`${site.name}, হোম পেজ`}>
+      {/* Row 1 */}
+      <div className="wrap hbar">
+        <button
+          type="button"
+          className="menu-toggle"
+          aria-expanded={menuOpen}
+          aria-controls="menu-sheet"
+          aria-label={menuOpen ? "মেনু বন্ধ করুন" : "মেনু খুলুন"}
+          onClick={() => { setTab("menu"); setMenuOpen((v) => !v); }}
+        >
+          {menuOpen ? <CloseIcon /> : <MenuIcon />}
+        </button>
+
+        <Link className="logo" href="/" aria-label={`${site.name}, হোম পেজ`} onClick={closeAll}>
           <LogoMark />
           <span>
             <b>{site.name}</b>
             <small>{site.tagline}</small>
           </span>
         </Link>
-        <nav className="mainnav" aria-label="প্রধান মেনু">
-          {links.map((l) => (
-            <Link key={l.href} href={l.href}>{l.label}</Link>
-          ))}
-        </nav>
+
+        <div className="hsearch">
+          <SearchBox items={searchItems} />
+        </div>
+
         <div className="head-actions">
-          <a className="call-pill" href={`tel:${phone}`}>
-            <span className="ic"><PhoneIcon /></span>
-            <span>অর্ডার করতে কল করুন<br /><b className="num">{phoneDisplay}</b></span>
-          </a>
-          <a className="icon-btn menu-btn" href={`tel:${phone}`} aria-label={`কল করুন ${phoneDisplay}`}>
-            <PhoneIcon />
-          </a>
           <Link className="icon-btn" href="/account" aria-label="আমার অ্যাকাউন্ট ও অর্ডার">
             <UserIcon />
           </Link>
-          <button
-            type="button"
-            className="icon-btn menu-btn"
-            aria-expanded={open}
-            aria-controls="menu-sheet"
-            aria-label={open ? "মেনু বন্ধ করুন" : "মেনু খুলুন"}
-            onClick={() => setOpen((v) => !v)}
-          >
-            {open ? <CloseIcon /> : <MenuIcon />}
-          </button>
         </div>
       </div>
-      <div className="wrap search-row">
-        <SearchBox items={searchItems} />
+
+      {/* Row 2: green bar (computers) */}
+      <div className="greenbar">
+        <div className="wrap greenbar-in">
+          <div className="cats" ref={catsRef}>
+            <button type="button" className="cats-btn" aria-expanded={catsOpen} aria-controls="cats-panel" onClick={() => setCatsOpen((v) => !v)}>
+              <GridIcon />
+              <span>সকল ক্যাটাগরি</span>
+              <span className={`chev${catsOpen ? " up" : ""}`}><Chevron /></span>
+            </button>
+            {catsOpen && (
+              <div className="cats-panel" id="cats-panel">
+                <ul>
+                  {catLinks.map((c) => (
+                    <li key={c.href}>
+                      <Link href={c.href} onClick={closeAll} aria-current={isCurrent(c.href, path) ? "page" : undefined}>
+                        <span className="cats-text">
+                          <b>{c.label}</b>
+                          {c.blurb && <small>{c.blurb}</small>}
+                        </span>
+                        <Chevron dir="right" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                <Link className="cats-all" href="/#products" onClick={closeAll}>সব পণ্য দেখুন</Link>
+              </div>
+            )}
+          </div>
+
+          <nav className="mainnav" aria-label="প্রধান মেনু">
+            <ul>
+              {mainLinks.map((l) => (
+                <li key={l.href}>
+                  <Link href={l.href} aria-current={isCurrent(l.href, path) ? "page" : undefined}>{l.label}</Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <Link className="track-btn" href="/account" aria-current={isCurrent("/account", path) ? "page" : undefined}>আমার অর্ডার</Link>
+        </div>
       </div>
-      <div className="menu-sheet" id="menu-sheet" hidden={!open}>
-        <nav className="wrap" aria-label="মোবাইল মেনু">
-          {[...links, ...extra].map((l) => (
-            <Link key={l.href} href={l.href} onClick={() => setOpen(false)}>{l.label}</Link>
-          ))}
-        </nav>
+
+      {/* Phones: menu panel with two tabs */}
+      <div className="menu-sheet" id="menu-sheet" hidden={!menuOpen}>
+        <div className="sheet-tabs" role="tablist" aria-label="মেনু">
+          <button type="button" role="tab" aria-selected={tab === "menu"} onClick={() => setTab("menu")}>মূল মেনু</button>
+          <button type="button" role="tab" aria-selected={tab === "categories"} onClick={() => setTab("categories")}><GridIcon /> সকল ক্যাটাগরি</button>
+        </div>
+        <div className="wrap sheet-body">
+          {tab === "menu" ? (
+            <nav aria-label="মোবাইল মেনু">
+              <ul className="sheet-links">
+                {[...mainLinks, { href: "/account", label: "আমার অর্ডার ও অ্যাকাউন্ট" }].map((l) => (
+                  <li key={l.href}>
+                    <Link href={l.href} onClick={closeAll} aria-current={isCurrent(l.href, path) ? "page" : undefined}>
+                      <span>{l.label}</span><Chevron dir="right" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ) : (
+            <ul className="sheet-cats">
+              {catLinks.map((c) => (
+                <li key={c.href}>
+                  <Link href={c.href} onClick={closeAll} aria-current={isCurrent(c.href, path) ? "page" : undefined}>
+                    <span className="cats-text">
+                      <b>{c.label}</b>
+                      {c.blurb && <small>{c.blurb}</small>}
+                    </span>
+                    <Chevron dir="right" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="sheet-foot">
+            অর্ডার করতে কল করুন: <a className="num" href={`tel:${phone}`}>{phoneDisplay}</a>
+          </p>
+        </div>
       </div>
     </header>
   );

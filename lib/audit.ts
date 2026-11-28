@@ -84,6 +84,7 @@ export const actionLabel: Record<string, string> = {
   "review.moderate": "রিভিউ যাচাই",
   "page.save": "পেজ সম্পাদনা",
   "announcement.save": "ঘোষণা",
+  "menu.save": "মেনু সম্পাদনা",
   "2fa.enable": "২-ধাপ লগইন চালু",
   "2fa.disable": "২-ধাপ লগইন বন্ধ",
   "roles.update": "ভূমিকার অনুমতি বদল",

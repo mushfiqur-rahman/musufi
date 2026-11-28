@@ -3,13 +3,16 @@ import { Noto_Serif_Bengali, Poppins } from "next/font/google";
 import { JsonLd } from "@/components/json-ld";
 import { WhatsAppIcon } from "@/components/icons";
 import { SiteFooter } from "@/components/site-footer";
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeader, SiteHeaderLive } from "@/components/site-header";
+import { Suspense } from "react";
 import { getCatalog } from "@/lib/catalog";
 import { site } from "@/lib/site";
 import { paymentNames, waLink } from "@/lib/store-config";
 import { getStoreSettings } from "@/lib/store-settings";
 import { getAnnouncement } from "@/lib/content";
 import { toSearchItem } from "@/lib/search";
+import { getMenuLinks } from "@/lib/menu";
+import { A11yBar, A11Y_BOOT_SCRIPT } from "@/components/a11y-bar";
 import Link from "next/link";
 import "./globals.css";
 
@@ -54,10 +57,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#16211a" },
-  ],
+  themeColor: "#ffffff",
+  colorScheme: "light", // light only: customers here prefer it
 };
 
 function storeJsonLd(phone: string, payments: string[]) {
@@ -77,22 +78,32 @@ function storeJsonLd(phone: string, payments: string[]) {
 }
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const [{ categories, products }, settings, announcement] = await Promise.all([getCatalog(), getStoreSettings(), getAnnouncement()]);
+  const [{ categories, products }, settings, announcement, menu] = await Promise.all([getCatalog(), getStoreSettings(), getAnnouncement(), getMenuLinks()]);
+  const headerProps = {
+    phone: settings.contact.phone,
+    menu,
+    categories: categories.map((c) => ({ id: c.id, label: c.label, blurb: c.blurb })),
+    searchItems: products.map((p) => toSearchItem(p, categories.find((c) => c.id === p.category)?.label ?? "", false)),
+  };
   const orgJsonLd = storeJsonLd(settings.contact.phone, paymentNames(settings.payments));
   return (
-    <html lang="bn" data-scroll-behavior="smooth" className={`${poppins.variable} ${bangla.variable}`}>
+    // suppressHydrationWarning: the reading-controls script below may set a font size
+    // and a class on <html> before React loads; that difference is intended.
+    <html lang="bn" data-scroll-behavior="smooth" className={`${poppins.variable} ${bangla.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: A11Y_BOOT_SCRIPT }} />
+      </head>
       <body>
+        <A11yBar />
         <a className="skip" href="#main">মূল অংশে যান</a>
         {announcement.active && announcement.text && (
           <div className="announce" role="region" aria-label="ঘোষণা">
             <div className="wrap">{announcement.link ? <Link href={announcement.link}>{announcement.text} →</Link> : announcement.text}</div>
           </div>
         )}
-        <SiteHeader
-          phone={settings.contact.phone}
-          categories={categories.map((c) => ({ id: c.id, label: c.label }))}
-          searchItems={products.map((p) => toSearchItem(p, categories.find((c) => c.id === p.category)?.label ?? "", false))}
-        />
+        <Suspense fallback={<SiteHeader {...headerProps} path={null} />}>
+          <SiteHeaderLive {...headerProps} />
+        </Suspense>
         <main id="main">{children}</main>
         <SiteFooter />
         <a className="fab" href={waLink(settings.contact.whatsapp, "আসসালামু আলাইকুম, আমি অর্ডার করতে চাই।")} target="_blank" rel="noopener" aria-label="হোয়াটসঅ্যাপে প্রশ্ন করুন">
