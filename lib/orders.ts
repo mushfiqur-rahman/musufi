@@ -18,12 +18,18 @@ export const statusLabel: Record<OrderStatus, string> = {
   cancelled: "বাতিল",
 };
 
-export type NewOrder = {
-  customerId: number;
+/** One product line of an order. */
+export type OrderLine = {
   /** Fresh from the database (lib/catalog.ts loadOrderable), never from the cache. */
   product: Orderable;
   variantIndex: number;
   qty: number;
+};
+
+export type NewOrder = {
+  customerId: number;
+  /** One or more lines (a cart), each product + size at most once. */
+  lines: OrderLine[];
   zone: DeliveryZone;
   deliveryFee: number;
   name: string;
@@ -51,22 +57,31 @@ export class OutOfStockError extends Error {
  * Stock is decremented with a guarded UPDATE, so two customers can never both
  * buy the last unit.
  */
+/** Sum of price × qty over the lines (prices from the database). */
+export function linesSubtotal(lines: OrderLine[]): number {
+  return lines.reduce((s, l) => s + l.product.variants[l.variantIndex].price * l.qty, 0);
+}
+
 export async function createOrder(o: NewOrder): Promise<{ orderNo: string; subtotal: number; total: number }> {
-  const v = o.product.variants[o.variantIndex];
-  const subtotal = v.price * o.qty;
+  if (o.lines.length === 0) throw new Error("Order has no lines");
+  const items = o.lines.map((l) => ({ ...l, v: l.product.variants[l.variantIndex] }));
+  const subtotal = linesSubtotal(o.lines);
   const discount = o.coupon?.discount ?? 0;
   const total = Math.max(0, subtotal + o.deliveryFee - discount);
-  const cost = v.cost;
+  // Cost is known only if every line has a cost price.
+  const costTotal = items.every((i) => i.v.cost !== null) ? items.reduce((s, i) => s + (i.v.cost ?? 0) * i.qty, 0) : null;
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const orderNo = newOrderNo();
     try {
       await transaction(async (conn) => {
-        const [stock] = await conn.query<import("mysql2").ResultSetHeader>(
-          "UPDATE product_variants SET stock = stock - ? WHERE id = ? AND stock IS NOT NULL AND stock >= ?",
-          [o.qty, v.id, o.qty],
-        );
-        if (v.stock !== null && stock.affectedRows !== 1) throw new OutOfStockError(`Not enough stock for variant ${v.id}`);
+        for (const { v, qty } of items) {
+          const [stock] = await conn.query<import("mysql2").ResultSetHeader>(
+            "UPDATE product_variants SET stock = stock - ? WHERE id = ? AND stock IS NOT NULL AND stock >= ?",
+            [qty, v.id, qty],
+          );
+          if (v.stock !== null && stock.affectedRows !== 1) throw new OutOfStockError(`Not enough stock for variant ${v.id}`);
+        }
         if (o.coupon) {
           // Guarded increment: a coupon limited to N uses can never be used N+1 times.
           const [used] = await conn.query<import("mysql2").ResultSetHeader>(
@@ -81,13 +96,15 @@ export async function createOrder(o: NewOrder): Promise<{ orderNo: string; subto
                                zone, subtotal, delivery_fee, coupon_code, discount, total, cost_total)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [orderNo, o.customerId, o.name, o.phone, o.address, o.parts.divisionId, o.parts.districtId, o.parts.upazilaId, o.parts.localId,
-           o.parts.line, o.zone, subtotal, o.deliveryFee, o.coupon?.code ?? null, discount, total, cost === null ? null : cost * o.qty],
+           o.parts.line, o.zone, subtotal, o.deliveryFee, o.coupon?.code ?? null, discount, total, costTotal],
         );
-        await conn.query(
-          `INSERT INTO order_items (order_id, product_slug, product_name, variant_index, variant_id, variant_label, unit_price, unit_cost, qty)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [res.insertId, o.product.slug, o.product.name, o.variantIndex, v.id, v.label, v.price, cost, o.qty],
-        );
+        for (const { product, variantIndex, v, qty } of items) {
+          await conn.query(
+            `INSERT INTO order_items (order_id, product_slug, product_name, variant_index, variant_id, variant_label, unit_price, unit_cost, qty)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [res.insertId, product.slug, product.name, variantIndex, v.id, v.label, v.price, v.cost, qty],
+          );
+        }
         await conn.query("INSERT INTO order_events (order_id, status, note) VALUES (?, 'new', 'ওয়েবসাইট থেকে অর্ডার')", [res.insertId]);
         await conn.query("UPDATE customers SET name = ?, phone = ?, address = ?, address_parts = ? WHERE id = ?", [o.name, o.phone, o.address, JSON.stringify(o.parts), o.customerId]);
       });

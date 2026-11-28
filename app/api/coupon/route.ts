@@ -2,11 +2,12 @@
 // database, never taken from the browser; the order API checks the coupon again.
 import { serverTrouble } from "@/lib/api";
 import { currentCustomer } from "@/lib/auth";
-import { loadOrderable } from "@/lib/catalog";
 import { evaluateCoupon } from "@/lib/coupons";
 import { dbConfigured } from "@/lib/db";
 import { deliveryFee, zoneFor } from "@/lib/store-config";
 import { loadStoreSettingsFresh } from "@/lib/store-settings";
+import { linesSubtotal } from "@/lib/orders";
+import { loadLines, parseLines } from "@/lib/order-lines";
 
 // Small in-memory limit against code guessing: 20 checks per IP per 10 minutes.
 const hits = new Map<string, number[]>();
@@ -24,18 +25,14 @@ export async function POST(request: Request) {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (limited(ip)) return Response.json({ ok: false, message: "অনেকবার চেষ্টা হয়েছে। একটু পরে আবার চেষ্টা করুন।" }, { status: 429 });
   const b = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  const slug = typeof b?.slug === "string" ? b.slug : "";
-  const variant = Number(b?.variant);
-  const qty = Number(b?.qty);
+  // One product (slug/variant/qty) or a whole cart (items: [...]), same as /api/order.
+  const parsed = parseLines(b ?? {});
+  if (!parsed.ok) return Response.json({ ok: false, message: parsed.message }, { status: 400 });
   const districtId = Number(b?.districtId);
-  if (!/^[a-z0-9-]{1,80}$/.test(slug) || !Number.isInteger(variant) || !Number.isInteger(qty) || qty < 1 || qty > 20) {
-    return Response.json({ ok: false, message: "তথ্য সঠিক নয়।" }, { status: 400 });
-  }
   try {
-    const [product, settings, me] = await Promise.all([loadOrderable(slug), loadStoreSettingsFresh(), currentCustomer().catch(() => null)]);
-    const v = product?.variants[variant];
-    if (!v) return Response.json({ ok: false, message: "পণ্যটি পাওয়া যায়নি।" }, { status: 404 });
-    const subtotal = v.price * qty;
+    const [checked, settings, me] = await Promise.all([loadLines(parsed.lines), loadStoreSettingsFresh(), currentCustomer().catch(() => null)]);
+    if (!checked.ok) return Response.json({ ok: false, message: checked.message }, { status: 404 });
+    const subtotal = linesSubtotal(checked.lines);
     const fee = Number.isInteger(districtId) && districtId > 0 ? deliveryFee(settings, zoneFor(settings, districtId), subtotal) : 0;
     const r = await evaluateCoupon(b?.code, { subtotal, deliveryFee: fee, customerId: me?.id ?? null });
     return Response.json(r.ok ? { ok: true, discount: r.discount, freeShipping: r.coupon.type === "free_shipping", message: r.message } : r);

@@ -80,7 +80,6 @@ function storeJsonLd(phone: string, payments: string[]) {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const [{ categories, products }, settings, announcement, menu] = await Promise.all([getCatalog(), getStoreSettings(), getAnnouncement(), getMenuLinks()]);
   const headerProps = {
-    phone: settings.contact.phone,
     menu,
     categories: categories.map((c) => ({ id: c.id, label: c.label, blurb: c.blurb })),
     searchItems: products.map((p) => toSearchItem(p, categories.find((c) => c.id === p.category)?.label ?? "", false)),

@@ -1,22 +1,20 @@
-import { loadOrderable, type Orderable } from "@/lib/catalog";
+// Places an order: one product (product page) or several (cart).
+// Everything that matters is checked again here, never trusted from the browser:
+// login, prices, stock, delivery zone, delivery fee and coupon.
 import { clientIp, currentCustomer } from "@/lib/auth";
 import { dbConfigured } from "@/lib/db";
 import { mailConfigured, sendOrderAlert, sendOrderConfirmation, smtpReady } from "@/lib/mailer";
 import { evaluateCoupon } from "@/lib/coupons";
-import { CouponUsedUpError, createOrder, OutOfStockError } from "@/lib/orders";
+import { CouponUsedUpError, createOrder, linesSubtotal, OutOfStockError } from "@/lib/orders";
+import { loadLines, parseLines, type RawLine } from "@/lib/order-lines";
 import { serverTrouble } from "@/lib/api";
-import { zoneForDistrict, type AddressParts } from "@/lib/geo";
+import { type AddressParts } from "@/lib/geo";
 import { BD_MOBILE, parseAddress } from "@/lib/address";
 import { deliveryFee, zoneFor } from "@/lib/store-config";
 import { loadStoreSettingsFresh } from "@/lib/store-settings";
-import type { DeliveryZone } from "@/lib/site";
 
 type OrderInput = {
-  slug: string;
-  variant: number;
-  qty: number;
-  /** Worked out from the district, never taken from the browser. */
-  zone: DeliveryZone;
+  lines: RawLine[];
   name: string;
   phone: string;
   /** Full line for couriers and emails. */
@@ -24,33 +22,19 @@ type OrderInput = {
   parts: AddressParts;
 };
 
-/** Checks the request's shape. Product, size, stock and zone are checked later against the database. */
+/** Checks the request's shape. Products, stock and zone are checked later against the database. */
 function validate(body: unknown): { ok: true; order: OrderInput } | { ok: false; message: string } {
   if (!body || typeof body !== "object") return { ok: false, message: "অর্ডারের তথ্য পাওয়া যায়নি।" };
   const b = body as Record<string, unknown>;
-  const slug = typeof b.slug === "string" ? b.slug.trim() : "";
-  if (!/^[a-z0-9-]{1,80}$/.test(slug)) return { ok: false, message: "পণ্যটি খুঁজে পাওয়া যায়নি।" };
-  const variant = Number(b.variant);
-  if (!Number.isInteger(variant) || variant < 0 || variant > 50) return { ok: false, message: "পরিমাণটি সঠিক নয়।" };
-  const qty = Number(b.qty);
-  if (!Number.isInteger(qty) || qty < 1 || qty > 20) return { ok: false, message: "সংখ্যা ১ থেকে ২০-এর মধ্যে দিন।" };
+  const lines = parseLines(b);
+  if (!lines.ok) return lines;
   const name = typeof b.name === "string" ? b.name.trim() : "";
   const phone = typeof b.phone === "string" ? b.phone.trim() : "";
   if (name.length < 2 || name.length > 80) return { ok: false, message: "আপনার নাম দিন।" };
   if (!BD_MOBILE.test(phone)) return { ok: false, message: "১১ সংখ্যার মোবাইল নম্বর দিন।" };
   const addr = parseAddress(b.address);
   if (!addr.ok) return addr;
-  return { ok: true, order: { slug, variant, qty, zone: zoneForDistrict(addr.parts.districtId), name, phone, address: addr.line, parts: addr.parts } };
-}
-
-/** Product rules against the live database row. */
-function checkProduct(product: Orderable | null, o: OrderInput): string | null {
-  if (!product) return "পণ্যটি এখন পাওয়া যাচ্ছে না।";
-  const v = product.variants[o.variant];
-  if (!v) return "পরিমাণটি সঠিক নয়। পেজটি রিফ্রেশ করে আবার চেষ্টা করুন।";
-  if (v.stock !== null && v.stock < o.qty) return v.stock > 0 ? `এই সাইজের মাত্র ${v.stock}টি আছে।` : "এই সাইজ এখন স্টকে নেই।";
-  if (!product.zones.includes(o.zone)) return "এই পণ্য এখন শুধু ঢাকার ভেতরে ডেলিভারি হয়।";
-  return null;
+  return { ok: true, order: { lines: lines.lines, name, phone, address: addr.line, parts: addr.parts } };
 }
 
 // Simple spam guard: at most 5 orders per 10 minutes from one IP address.
@@ -85,7 +69,7 @@ export async function POST(request: Request) {
     return Response.json({ message: `অনলাইন অর্ডার এখনো চালু হয়নি। ${FALLBACK}` }, { status: 503 });
   }
 
-  // An account is required to order. The form logs the customer in by email code first.
+  // An account is required to order. The form logs the customer in first.
   let customer;
   try {
     customer = await currentCustomer();
@@ -102,26 +86,28 @@ export async function POST(request: Request) {
 
   // Prices, stock and zones come fresh from the database, never from the browser.
   const o = result.order;
-  let product: Orderable | null;
   let settings;
+  let checked;
+  let zone;
   try {
-    [product, settings] = await Promise.all([loadOrderable(o.slug), loadStoreSettingsFresh()]);
+    settings = await loadStoreSettingsFresh();
     // Zone from the district list in settings (which districts count as "inside Dhaka").
-    o.zone = zoneFor(settings, o.parts.districtId);
+    zone = zoneFor(settings, o.parts.districtId);
+    checked = await loadLines(o.lines, zone);
   } catch (e) {
     return serverTrouble("order-product", e);
   }
-  const problem = checkProduct(product, o);
-  if (problem || !product) return Response.json({ message: problem }, { status: 409 });
-  const v = product.variants[o.variant];
-  const zone = { label: settings.delivery[o.zone].label, fee: deliveryFee(settings, o.zone, v.price * o.qty) };
+  if (!checked.ok) return Response.json({ message: checked.message }, { status: 409 });
+  const lines = checked.lines;
+  const subtotal = linesSubtotal(lines);
+  const fee = deliveryFee(settings, zone, subtotal);
 
   // Coupon: checked again here (never trust the preview). A bad code stops the order
   // with a clear message instead of silently charging the full price.
   let coupon: { id: number; code: string; discount: number } | undefined;
   const rawCoupon = (body as Record<string, unknown>).coupon;
   if (typeof rawCoupon === "string" && rawCoupon.trim()) {
-    const c = await evaluateCoupon(rawCoupon, { subtotal: v.price * o.qty, deliveryFee: zone.fee, customerId: customer.id });
+    const c = await evaluateCoupon(rawCoupon, { subtotal, deliveryFee: fee, customerId: customer.id });
     if (!c.ok) return Response.json({ message: c.message, field: "coupon" }, { status: 409 });
     coupon = { id: c.coupon.id, code: c.coupon.code, discount: c.discount };
   }
@@ -130,11 +116,9 @@ export async function POST(request: Request) {
   try {
     saved = await createOrder({
       customerId: customer.id,
-      product,
-      variantIndex: o.variant,
-      qty: o.qty,
-      zone: o.zone,
-      deliveryFee: zone.fee,
+      lines,
+      zone,
+      deliveryFee: fee,
       name: o.name,
       phone: o.phone,
       address: o.address,
@@ -146,7 +130,7 @@ export async function POST(request: Request) {
       return Response.json({ message: "দুঃখিত, এই কুপনের সব ব্যবহার শেষ হয়ে গেছে। কুপন ছাড়া আবার চেষ্টা করুন।", field: "coupon" }, { status: 409 });
     }
     if (err instanceof OutOfStockError) {
-      return Response.json({ message: "দুঃখিত, এইমাত্র এই সাইজের স্টক শেষ হয়ে গেছে।" }, { status: 409 });
+      return Response.json({ message: "দুঃখিত, এইমাত্র একটি পণ্যের স্টক শেষ হয়ে গেছে। কার্ট দেখে আবার চেষ্টা করুন।" }, { status: 409 });
     }
     return serverTrouble("order-save", err);
   }
@@ -154,12 +138,13 @@ export async function POST(request: Request) {
   // The order is saved, so email problems are logged but do not fail the order.
   const alert = {
     orderNo: saved.orderNo,
-    productName: product.name,
-    variantLabel: v.label,
-    unitPrice: v.price,
-    qty: o.qty,
-    zoneLabel: zone.label,
-    deliveryFee: zone.fee,
+    items: lines.map((l) => {
+      const v = l.product.variants[l.variantIndex];
+      return { productName: l.product.name, variantLabel: v.label, unitPrice: v.price, qty: l.qty };
+    }),
+    discount: coupon?.discount ?? 0,
+    zoneLabel: settings.delivery[zone].label,
+    deliveryFee: fee,
     total: saved.total,
     name: o.name,
     phone: o.phone,

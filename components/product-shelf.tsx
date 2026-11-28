@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { CardProduct, CategoryId } from "@/lib/products";
 import { taka } from "@/lib/site";
 import { ProductPhoto } from "./product-photo";
+import { AddToCartButton } from "./add-to-cart-button";
 
 export function ProductCard({ p, headingLevel = 3 }: { p: CardProduct; headingLevel?: 2 | 3 }) {
   const [sel, setSel] = useState(p.defaultVariant);
@@ -37,7 +38,10 @@ export function ProductCard({ p, headingLevel = 3 }: { p: CardProduct; headingLe
           <b>{taka(v.price)}</b>
           {v.compareAt && <s aria-label={`আগের দাম ${taka(v.compareAt)}`}>{taka(v.compareAt)}</s>}
         </p>
-        <Link className="btn btn-primary" href={`${href}#order`}>অর্ডার করুন</Link>
+        <AddToCartButton
+          item={{ slug: p.slug, variant: sel, name: p.name, label: v.label, price: v.price, image: p.image, art: p.art }}
+          soldOut={allSoldOut || (v.stock !== undefined && v.stock <= 0)}
+        />
       </div>
     </article>
   );

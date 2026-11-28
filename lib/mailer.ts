@@ -3,12 +3,14 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { bn, site, taka } from "./site";
 
+export type OrderAlertItem = { productName: string; variantLabel: string; unitPrice: number; qty: number };
+
 export type OrderAlert = {
   orderNo: string;
-  productName: string;
-  variantLabel: string;
-  unitPrice: number;
-  qty: number;
+  /** One row per product line (a cart can have several). */
+  items: OrderAlertItem[];
+  /** Discount from a coupon, if any. */
+  discount: number;
   zoneLabel: string;
   deliveryFee: number;
   total: number;
@@ -65,9 +67,12 @@ export async function sendOrderAlert(o: OrderAlert): Promise<void> {
   const rows: [string, string][] = [
     ["অর্ডার নম্বর", o.orderNo],
     ["সময়", dhakaTime(o.placedAt) + " (ঢাকা)"],
-    ["পণ্য", `${o.productName} · ${o.variantLabel}`],
-    ["দাম × সংখ্যা", `${taka(o.unitPrice)} × ${bn(o.qty)} = ${taka(o.unitPrice * o.qty)}`],
+    ...o.items.map((it, i): [string, string] => [
+      o.items.length > 1 ? `পণ্য ${bn(i + 1)}` : "পণ্য",
+      `${it.productName} · ${it.variantLabel} · ${taka(it.unitPrice)} × ${bn(it.qty)} = ${taka(it.unitPrice * it.qty)}`,
+    ]),
     ["ডেলিভারি", `${o.zoneLabel} · ${taka(o.deliveryFee)}`],
+    ...(o.discount > 0 ? [["কুপন ছাড়", `−${taka(o.discount)}`] as [string, string]] : []),
     ["মোট (ক্যাশ অন ডেলিভারি)", taka(o.total)],
     ["ক্রেতার নাম", o.name],
     ["মোবাইল", o.phone],
@@ -151,8 +156,12 @@ export async function sendLoginCode(to: string, code: string): Promise<void> {
 export async function sendOrderConfirmation(to: string, o: OrderAlert): Promise<void> {
   const rows: [string, string][] = [
     ["অর্ডার নম্বর", o.orderNo],
-    ["পণ্য", `${o.productName} · ${o.variantLabel} × ${bn(o.qty)}`],
+    ...o.items.map((it, i): [string, string] => [
+      o.items.length > 1 ? `পণ্য ${bn(i + 1)}` : "পণ্য",
+      `${it.productName} · ${it.variantLabel} × ${bn(it.qty)} = ${taka(it.unitPrice * it.qty)}`,
+    ]),
     ["ডেলিভারি", `${o.zoneLabel} · ${taka(o.deliveryFee)}`],
+    ...(o.discount > 0 ? [["কুপন ছাড়", `−${taka(o.discount)}`] as [string, string]] : []),
     ["মোট (হাতে পেয়ে দেবেন)", taka(o.total)],
     ["ঠিকানা", o.address],
   ];

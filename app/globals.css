@@ -3583,3 +3583,176 @@ legend {
 html.a11y-bold body :is(p, li, a, span, label, input, select, textarea, small, td, th, dd, dt, button, summary, legend) {
   font-weight: 700;
 }
+
+/* ---------- Cart ---------- */
+/* Header cart button: basket + count badge + total */
+.cart-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  text-decoration: none;
+}
+.cart-btn:hover {
+  border-color: var(--green);
+}
+.cart-ic {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+}
+.cart-ic svg {
+  width: 24px;
+  height: 24px;
+}
+.cart-count {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.cart-total {
+  font-weight: 700;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+/* Product page: cart + buy-now buttons each take a full row */
+.actions .btn-lg {
+  grid-column: 1 / -1;
+}
+.actions .btn svg,
+.add-cart svg,
+.buybar .btn svg {
+  width: 20px;
+  height: 20px;
+}
+.added-note a {
+  font-weight: 700;
+}
+.buybar .btn-ghost {
+  flex: none;
+  width: 48px;
+  padding: 0;
+}
+
+/* Product cards: "কার্টে যোগ করুন" */
+.add-cart {
+  gap: 8px;
+}
+.add-cart.is-added {
+  background: var(--green-deep);
+}
+
+/* Cart page */
+.cart-layout {
+  display: grid;
+  gap: 20px;
+  padding-bottom: 40px;
+  align-items: start;
+}
+.cart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.cart-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.cart-line {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+.cart-thumb {
+  display: block;
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--leaf-50);
+}
+.cart-thumb .photo-slot {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+}
+.cart-info {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.cart-info a {
+  text-decoration: none;
+  color: inherit;
+}
+.cart-info small {
+  color: var(--muted);
+}
+.cart-info .qty {
+  justify-self: start;
+}
+.cart-info .qty button {
+  width: 36px;
+  height: 36px;
+}
+.cart-info .qty output {
+  width: 40px;
+}
+.cart-line-end {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+.cart-sub {
+  display: flex;
+  justify-content: space-between;
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+}
+.cart-done-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cart-empty {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+@media (max-width: 420px) {
+  /* Small phones: show the cart total under the icon area only as the badge */
+  .cart-btn {
+    padding: 0 10px 0 8px;
+  }
+}
+@media (min-width: 1000px) {
+  .cart-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+  }
+}

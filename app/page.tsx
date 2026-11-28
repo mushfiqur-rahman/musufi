@@ -4,6 +4,7 @@ import { CashIcon, PinIcon, ReturnIcon, TruckIcon, WhatsAppIcon } from "@/compon
 import { JsonLd } from "@/components/json-ld";
 import { ProductPhoto } from "@/components/product-photo";
 import { ProductShelf } from "@/components/product-shelf";
+import { AddToCartButton } from "@/components/add-to-cart-button";
 import { getCatalog, productsInCategory } from "@/lib/catalog";
 import { toCard } from "@/lib/products";
 import { bn, site, taka } from "@/lib/site";
@@ -78,7 +79,10 @@ export default async function Home() {
               <p className="meta"><PinIcon width={14} height={14} style={{ color: "var(--green)", flex: "none" }} /><span>{featured.origin} · {featured.short}</span></p>
               <p className="hp-price num"><b>{taka(fv.price)}</b> <span>{fv.label}</span></p>
               <div className="hp-actions">
-                <Link className="btn btn-primary" href={`/products/${featured.slug}#order`}>অর্ডার করুন</Link>
+                <AddToCartButton
+                  item={{ slug: featured.slug, variant: featured.defaultVariant, name: featured.name, label: fv.label, price: fv.price, image: featured.images?.[0]?.src, art: featured.art }}
+                  soldOut={fv.stock !== undefined && fv.stock <= 0}
+                />
                 <a className="btn btn-ghost" href={waLink(settings.contact.whatsapp, `আসসালামু আলাইকুম, ${featured.name} সম্পর্কে জানতে চাই।`)} target="_blank" rel="noopener"><WhatsAppIcon />প্রশ্ন করুন</a>
               </div>
             </div>

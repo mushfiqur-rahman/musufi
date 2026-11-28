@@ -1,7 +1,8 @@
 "use client";
 
 // Site header, two tiers:
-// - Row 1 (white): menu button (phones), logo, product search, call + account.
+// - Row 1 (white): logo, product search, account, cart (icon + total), and the
+//   menu button at the far right on phones (easy to reach with the right thumb).
 //   On phones the search box drops to its own row under the logo.
 // - Row 2 (computers, solid green): "সকল ক্যাটাগরি" dropdown, main links with
 //   the current page highlighted, and "আমার অর্ডার" on the right.
@@ -11,10 +12,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { site } from "@/lib/site";
-import { phoneText } from "@/lib/store-config";
 import type { SearchItem } from "@/lib/search";
 import { CloseIcon, LogoMark, MenuIcon, UserIcon } from "./icons";
 import { SearchBox } from "./search-box";
+import { CartButton } from "./cart-button";
 
 export type NavCategory = { id: string; label: string; blurb?: string };
 
@@ -42,7 +43,6 @@ type HeaderProps = {
   categories: NavCategory[];
   /** Main menu links, chosen by the admin (lib/menu.ts). */
   menu: { href: string; label: string }[];
-  phone: string;
   searchItems: SearchItem[];
 };
 
@@ -56,8 +56,7 @@ export function SiteHeaderLive(props: HeaderProps) {
 }
 
 /** `path` = current URL path, or null when not known yet (nothing highlighted). */
-export function SiteHeader({ categories, menu, phone, searchItems, path }: HeaderProps & { path: string | null }) {
-  const phoneDisplay = phoneText(phone);
+export function SiteHeader({ categories, menu, searchItems, path }: HeaderProps & { path: string | null }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [tab, setTab] = useState<"menu" | "categories">("menu");
   const [catsOpen, setCatsOpen] = useState(false);
@@ -82,17 +81,6 @@ export function SiteHeader({ categories, menu, phone, searchItems, path }: Heade
     <header className="site-header">
       {/* Row 1 */}
       <div className="wrap hbar">
-        <button
-          type="button"
-          className="menu-toggle"
-          aria-expanded={menuOpen}
-          aria-controls="menu-sheet"
-          aria-label={menuOpen ? "মেনু বন্ধ করুন" : "মেনু খুলুন"}
-          onClick={() => { setTab("menu"); setMenuOpen((v) => !v); }}
-        >
-          {menuOpen ? <CloseIcon /> : <MenuIcon />}
-        </button>
-
         <Link className="logo" href="/" aria-label={`${site.name}, হোম পেজ`} onClick={closeAll}>
           <LogoMark />
           <span>
@@ -105,10 +93,22 @@ export function SiteHeader({ categories, menu, phone, searchItems, path }: Heade
           <SearchBox items={searchItems} />
         </div>
 
+        {/* Right side: account, cart, then the menu button at the far right (thumb reach on phones). */}
         <div className="head-actions">
           <Link className="icon-btn" href="/account" aria-label="আমার অ্যাকাউন্ট ও অর্ডার">
             <UserIcon />
           </Link>
+          <CartButton />
+          <button
+            type="button"
+            className="menu-toggle"
+            aria-expanded={menuOpen}
+            aria-controls="menu-sheet"
+            aria-label={menuOpen ? "মেনু বন্ধ করুন" : "মেনু খুলুন"}
+            onClick={() => { setTab("menu"); setMenuOpen((v) => !v); }}
+          >
+            {menuOpen ? <CloseIcon /> : <MenuIcon />}
+          </button>
         </div>
       </div>
 
@@ -189,9 +189,6 @@ export function SiteHeader({ categories, menu, phone, searchItems, path }: Heade
               ))}
             </ul>
           )}
-          <p className="sheet-foot">
-            অর্ডার করতে কল করুন: <a className="num" href={`tel:${phone}`}>{phoneDisplay}</a>
-          </p>
         </div>
       </div>
     </header>

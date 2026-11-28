@@ -136,7 +136,7 @@ async function ProductView({ params }: { params: PageProps<"/products/[slug]">["
           </div>
           <p className="summary"><b>এক কথায়:</b> {p.summary}</p>
           {p.taste && <p className="taste-line" style={{ fontSize: ".95rem" }}><span>স্বাদ:</span> {p.taste.oneLine} · <a href="#h-taste">বিস্তারিত দেখুন</a></p>}
-          <BuyBox slug={p.slug} name={p.name} variants={p.variants} defaultVariant={p.defaultVariant} zones={cat.zones} config={publicConfig(settings)} />
+          <BuyBox slug={p.slug} name={p.name} variants={p.variants} defaultVariant={p.defaultVariant} zones={cat.zones} config={publicConfig(settings)} image={p.images?.[0]?.src} art={p.art} />
           <ul className="info-list">
             <li><TruckIcon /><span>{dhakaOnly ? `শুধু ${dhaka.label} ${taka(dhaka.fee)} (${dhaka.days})` : `${dhaka.label} ${taka(dhaka.fee)} (${dhaka.days}), ${outside.label} ${taka(outside.fee)} (${outside.days})`}<small>অর্ডারের পর ফোন করে নিশ্চিত করা হয়</small></span></li>
             <li><CashIcon /><span>পণ্য হাতে পেয়ে টাকা দিন<small>বিকাশ ও নগদেও দেওয়া যায়</small></span></li>
